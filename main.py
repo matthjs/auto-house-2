@@ -1,19 +1,10 @@
-from src.wohnen_ethz import WohnenETHZ
-from src.wg_zimmer import WGZimmer
-from src.flatfox import Flatfox
+"""
+Entry point. Run ``uv run python main.py --help`` for usage.
+"""
 
-from src.personal_profile import PersonalProfile
+import sys
 
-profile = PersonalProfile("michal")
+from src.cli import main
 
-wg_zimmer = WGZimmer(profile, confirmation_mode=True)
-wg_zimmer.search()
-wg_zimmer.run()
-
-# wohnen_ethz = WohnenETHZ(profile)
-# wohnen_ethz.search()
-# wohnen_ethz.run()
-
-# flatfox = Flatfox(profile, confirmation_mode=True)
-# flatfox.search()
-# flatfox.run()
+if __name__ == "__main__":
+    sys.exit(main())
