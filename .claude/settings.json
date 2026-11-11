@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run pytest:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv sync:*)",
+      "Bash(make test)",
+      "Bash(make lint)",
+      "Bash(make format)",
+      "Bash(make check)"
+    ],
+    "ask": [
+      "Bash(uv run python main.py run:*)",
+      "Bash(python main.py run:*)",
+      "Bash(make me-have-a-house:*)",
+      "Bash(make dry-run:*)",
+      "Bash(uv run pytest -m live:*)"
+    ],
+    "deny": [
+      "Read(./secret/**/site_credentials.json)",
+      "Edit(./secret/**/site_credentials.json)"
+    ]
+  }
+}
