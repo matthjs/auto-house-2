@@ -65,12 +65,13 @@ def facts(text: str) -> list[str]:
     return [line for line in lines if FACT_LINE.match(line)][:MAX_FACTS]
 
 
-def format_entry(site: str, record: dict[str, Any]) -> str:
+def format_entry(site: str, record: dict[str, Any], with_draft: bool = True) -> str:
     """
-    Describe one draft for the digest.
+    Describe one listing for the digest.
 
     :param site: Site name.
     :param record: The listing's record.
+    :param with_draft: Include the draft message, if the record has one.
     :return: Plain text: fit, facts, commute, reasons, link and, if one was
         written, the draft.
     """
@@ -81,7 +82,7 @@ def format_entry(site: str, record: dict[str, Any]) -> str:
         parts += [f"  {line}" for line in record["commute"].splitlines()]
     parts += [f"  + {reason}" for reason in fit.get("reasons") or []]
     parts += [f"  ! {flag}" for flag in fit.get("red_flags") or []]
-    if not record.get("response"):
+    if not with_draft or not record.get("response"):
         return "\n".join(parts)
     if record["status"] == "needs_review":
         issues = "; ".join(record.get("review_issues") or [])
@@ -99,6 +100,7 @@ def compose(
     profile: SearchProfile,
     items: list[tuple[Tracker, dict[str, Any]]],
     note: str | None = None,
+    with_drafts: bool = True,
 ) -> tuple[str, str]:
     """
     Write the digest email.
@@ -106,6 +108,7 @@ def compose(
     :param profile: The search.
     :param items: Drafts from :func:`pending`.
     :param note: Extra line at the top, for example that this is a test.
+    :param with_drafts: Include draft messages; off when batch mode only judges.
     :return: Subject and plain-text body.
     """
     count = len(items)
@@ -115,7 +118,9 @@ def compose(
         f"been sent to anyone. For a flat you like, ask the agent to write the "
         f"message, send it on the site yourself, then tell the agent it is sent."
     )
-    entries = [format_entry(tracker.directory.name, rec) for tracker, rec in items]
+    entries = [
+        format_entry(tracker.directory.name, rec, with_drafts) for tracker, rec in items
+    ]
     if note:
         intro = f"{note.strip()}\n\n{intro}"
     divider = "\n\n" + "-" * 60 + "\n\n"

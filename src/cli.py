@@ -332,7 +332,9 @@ def cmd_digest(cfg: DictConfig) -> int:
     if not items:
         print("Nothing new for the digest.")
         return 0
-    subject, body = compose(profile, items, settings.get("note"))
+    subject, body = compose(
+        profile, items, settings.get("note"), with_drafts=bool(cfg.batch_drafts)
+    )
     to = recipients(profile)
     if not settings.get("enabled", False):
         who = ", ".join(to) or "nobody (no Email in the person files)"

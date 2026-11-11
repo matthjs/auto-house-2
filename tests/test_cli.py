@@ -237,7 +237,8 @@ def save_draft(workspace: Path, listing_id: str, score: int, status="drafted") -
 
 def test_digest_is_printed_until_enabled(workspace, capsys) -> None:
     save_draft(workspace, "1", 85)
-    assert run_command(load_config(workspace, "command=digest")) == 0
+    cfg = load_config(workspace, "command=digest", "batch_drafts=true")
+    assert run_command(cfg) == 0
     out = capsys.readouterr().out
     assert "[digest off] Would email a@x.ch" in out
     assert "Rent per month (CHF): 2400" in out and "ETH: 15 min (Ben)" in out
@@ -260,7 +261,11 @@ def test_digest_emails_members_once(workspace, capsys, monkeypatch) -> None:
 
     monkeypatch.setattr(EmailClient, "_send", fake_send)
     cfg = load_config(
-        workspace, "command=digest", "digest.enabled=true", "digest.note='Test run'"
+        workspace,
+        "command=digest",
+        "digest.enabled=true",
+        "digest.note='Test run'",
+        "batch_drafts=true",
     )
     assert run_command(cfg) == 0
     [(to, subject, body, bcc)] = sent
@@ -300,3 +305,10 @@ def test_digest_lists_shortlisted_without_a_draft(workspace, capsys) -> None:
 
 def test_batch_mode_only_judges_by_default(workspace) -> None:
     assert load_config(workspace).batch_drafts is False
+
+
+def test_digest_leaves_out_drafts_when_batch_only_judges(workspace, capsys) -> None:
+    save_draft(workspace, "1", 85)
+    assert run_command(load_config(workspace, "command=digest")) == 0
+    out = capsys.readouterr().out
+    assert "Fit 85/100" in out and "Guten Tag" not in out
