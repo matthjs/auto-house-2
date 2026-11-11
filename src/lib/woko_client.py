@@ -21,7 +21,8 @@ def parse_rooms(html: str, base_url: str = FREE_ROOMS_URL) -> list[dict[str, Any
 
     :param html: The list page HTML.
     :param base_url: URL the page was loaded from, to make links absolute.
-    :return: One dict per room: ``id``, ``url``, ``apply_url``, ``price`` and ``text``.
+    :return: One dict per room: ``id``, ``url``, ``apply_url``, ``price``,
+        ``address`` (``None`` if not shown) and ``text``.
     """
     soup = BeautifulSoup(html, "html.parser")
     rooms = []
@@ -45,8 +46,11 @@ def parse_rooms(html: str, base_url: str = FREE_ROOMS_URL) -> list[dict[str, Any
         if status:
             lines.append(status.get_text(" ", strip=True))
         texts = [t.get_text(" ", strip=True) for t in element.select(".crooms__text")]
-        for key, value in zip(texts[0::2], texts[1::2], strict=False):
+        facts = dict(zip(texts[0::2], texts[1::2], strict=False))
+        for key, value in facts.items():
             lines.append(f"{key}: {value}")
+        street, town = facts.get("Adresse"), facts.get("Ort")
+        address = f"{street}, {town}" if street and town else None
         price_text = element.get("data-price") or ""
         if price_text:
             lines.append(f"Miete/Monat: CHF {price_text}")
@@ -60,6 +64,7 @@ def parse_rooms(html: str, base_url: str = FREE_ROOMS_URL) -> list[dict[str, Any
                 "url": urljoin(base_url, detail_link["href"]),
                 "apply_url": urljoin(base_url, apply_link["href"]),
                 "price": int(price_text) if price_text.isdigit() else None,
+                "address": address,
                 "text": "\n".join(lines),
             }
         )

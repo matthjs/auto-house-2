@@ -37,7 +37,8 @@ def apply_env_defaults(argv: list[str]) -> list[str]:
     LLM is chosen at all, the first provider with an API key set is used.
 
     :param argv: Command-line arguments without the program name.
-    :return: The arguments with the extra overrides appended.
+    :return: The extra overrides first, then the arguments, so flags such as
+        ``--cfg job`` stay last.
     """
     extra = []
     for env_var, group in ENV_DEFAULTS.items():
@@ -51,7 +52,7 @@ def apply_env_defaults(argv: list[str]) -> list[str]:
             if os.environ.get(env_var):
                 extra.append(f"llm={llm}")
                 break
-    return argv + extra
+    return extra + argv
 
 
 # Hydra does not pass the task's return value back, so the exit code is kept here.

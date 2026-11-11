@@ -18,7 +18,7 @@ Look at `conf/search/` (ignore `example.yaml`) and check whether a `secret/` fol
 
 ## Step 1: Install check
 
-Run `uv sync`. Check whether `.env` exists with `test -e .env && echo yes` (never open it). If it doesn't, ask the user to run `cp .env.example .env` themselves; your settings block writing to `.env`. Chrome is only needed for Flatfox and wohnen.ethz.ch; mention it in Step 5 if they pick those sites.
+Run `uv sync`. Check whether `.env` exists with `test -e .env && echo yes` (never open it). If it doesn't, ask the user to run `cp .env.example .env` themselves; your settings block writing to `.env`. Google Chrome is only needed for wohnen.ethz.ch; mention it in Step 5 if they pick that site.
 
 ## Step 2: Who is searching
 
@@ -26,6 +26,7 @@ Ask: "Are you searching alone or together? What are everyone's first names? Who 
 
 - Use lowercase file names (`anna`, `ben`). The search name is the names joined with `_` (`anna_ben`), or the single name.
 - The **contact** is the person landlords reply to; their site logins and Gmail are used.
+- For a group, recommend that one person (usually the contact) runs the tool on their machine; the others only give their details. Two machines would each keep their own `data/` records and could contact the same listing twice.
 
 ## Step 3: Each person
 
@@ -46,6 +47,7 @@ Ask:
 - **Place:** city for wohnen.ethz.ch (e.g. `Zürich`) and the wgzimmer.ch region (e.g. `zuerich`, `kanton-zuerich`). Flatfox searches the city of Zurich by default; for another area, change `bbox` in `conf/site/flatfox.yaml`.
 - **Rooms** (groups): minimum number of rooms; default one bedroom each.
 - Move-in date, nice-to-haves, deal breakers.
+- **Places and commute:** where does each person go most days (university building, office)? Look up the address if they only name the place, and confirm it with them. Ask the longest trip they accept (`max_commute_minutes`). These go under `places` (name, address as `Street 1, 8000 Town`, `who`); Flatfox and WOKO listings then get public transport times to each.
 - **Sites:** `wgzimmer` (single rooms in shared flats; suits someone alone), `woko` (student rooms; students only), `flatfox` (flats and rooms; good for groups), `email_alerts` (Homegate, ImmoScout24 and Comparis through their alert emails; they set up the alerts on each portal, sent to the contact's Gmail), `wohnen_ethz` (login; ETH/UZH housing office, contact by email). None of these needs a site login except wohnen.ethz.ch.
 
 Write `conf/search/<search>.yaml` in the shape of `conf/search/example.yaml`, with `members` and `contact` set.

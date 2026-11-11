@@ -14,6 +14,7 @@ from typing import Any
 from omegaconf import DictConfig, OmegaConf
 
 from src.agent import ApplicationAgent, FitAssessment
+from src.lib.commute import CommuteClient, Place
 from src.lib.email_client import EmailError
 from src.lib.errors import SendError
 from src.lib.logger import logger, setup_logging
@@ -72,12 +73,21 @@ def build_profile(cfg: DictConfig) -> SearchProfile:
     members = [
         load_person(name, cfg.person_dir) for name in search.get("members") or []
     ]
+    places = [
+        Place(
+            name=str(place["name"]),
+            address=str(place["address"]),
+            who=[str(name) for name in place.get("who") or []],
+        )
+        for place in search.get("places") or []
+    ]
     return SearchProfile(
         name=cfg.search_name,
         members=members,
         contact=search.get("contact") or (members[0].name if members else ""),
         preferences=search.get("preferences") or {},
         data_root=Path(cfg.data_dir),
+        places=places,
     )
 
 
@@ -111,12 +121,17 @@ def build_runner(
     """
     if cfg.get("site") is None:
         raise ConfigError(f"Choose a site: site={'|'.join(SITES)}")
+    commute = cfg.get("commute") or {}
+    client = None
+    if commute.get("enabled", True) and profile.places:
+        client = CommuteClient(departure=str(commute.get("departure", "08:00")))
     return SITES[cfg.site.name](
         profile,
         agent,
         dry_run=bool(cfg.dry_run),
         max_sends=cfg.max_sends,
         options=_container(cfg.site),
+        commute=client,
     )
 
 
