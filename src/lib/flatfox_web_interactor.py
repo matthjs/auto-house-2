@@ -1,126 +1,152 @@
+"""
+Selenium driver for flatfox.ch.
+"""
+
+import re
+import time
+
+import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-import time
-from selenium.webdriver.chrome.options import Options
-import re
-import requests
 
+from src.lib.email_client import EmailClient
+from src.lib.errors import SendError
+from src.personal_profile import PersonalProfile
 
 TIME_DELAY_ON_LOAD = 0.5
-SILENT = False  # use driver.get_screenshot_as_file("capture.png") to debug
 
 
 class FlatfoxWebInteractor:
-    def __init__(self, profile, email_client):
+    """
+    Log in to flatfox.ch (with an emailed one-time code), search shared flats and
+    send contact requests.
+    """
+
+    def __init__(self, profile: PersonalProfile, email_client: EmailClient) -> None:
+        """
+        Start a Chrome session.
+
+        :param profile: Profile with the Flatfox login, search and contact details.
+        :param email_client: Client used to read the login code from the inbox.
+        """
         self.base_url = "https://flatfox.ch/en/accounts/login/?next=/en/search/"
         self.profile = profile
         self.email_client = email_client
         self.driver = webdriver.Chrome()
         self.state = "STARTING"
 
-    def load(self):
+    def load(self) -> None:
+        """
+        Open the login page and accept the cookie banner.
+        """
         self.driver.get(self.base_url)
         time.sleep(TIME_DELAY_ON_LOAD)
-        consent_button = self.driver.find_element(By.ID, "onetrust-accept-btn-handler")
-        consent_button.click()
+        self.driver.find_element(By.ID, "onetrust-accept-btn-handler").click()
         time.sleep(TIME_DELAY_ON_LOAD)
         self.state = "LOADED"
 
-    def enter(self):
-        username_field = self.driver.find_element(By.ID, "id_email")
-        username_field.send_keys(self.profile.flatfox_login)
-        consent_button = self.driver.find_element(By.CLASS_NAME, "css-1iioj0r")
-        consent_button.click()
+    def enter(self) -> None:
+        """
+        Log in with email, password and the one-time code sent by email.
+
+        :raises EmailError: If the login code does not arrive.
+        """
+        self.driver.find_element(By.ID, "id_email").send_keys(
+            self.profile.flatfox_login
+        )
+        continue_button = self.driver.find_element(By.CLASS_NAME, "css-1iioj0r")
+        continue_button.click()
         time.sleep(TIME_DELAY_ON_LOAD)
-        username_field = self.driver.find_element(By.ID, "id_password")
-        username_field.send_keys(self.profile.flatfox_password)
-        consent_button.click()
-        time.sleep(4)  # give email some time to arrive
-        code = self.email_client.retrieve_6digit_code()
-        otp_field = self.driver.find_element(By.ID, "f1")
-        otp_field.send_keys(code)
-        consent_button.click()
+        self.driver.find_element(By.ID, "id_password").send_keys(
+            self.profile.flatfox_password
+        )
+        continue_button.click()
+        code = self.email_client.retrieve_6digit_code(sender="flatfox")
+        self.driver.find_element(By.ID, "f1").send_keys(code)
+        continue_button.click()
         self.state = "ENTERED"
 
-    def search(self):
+    def search(self) -> None:
+        """
+        Search shared flats in the profile's place, up to the maximum rent.
+        """
         time.sleep(1)
-
         region_field = self.driver.find_element(
             By.CLASS_NAME, "mapboxgl-ctrl-geocoder--input"
         )
         region_field.send_keys(self.profile.place)
-        ### LOCATION
         time.sleep(1)
-        suggestion_button = self.driver.find_element(
+        self.driver.find_element(
             By.CLASS_NAME, "mapboxgl-ctrl-geocoder--suggestion-address"
-        )
-        suggestion_button.click()
+        ).click()
         region_field.send_keys(Keys.RETURN)
 
-        ### ROOMS
         time.sleep(1)
         buttons = self.driver.find_elements(By.CLASS_NAME, "css-1mtdczm")
         buttons[0].click()
         self.driver.find_element(By.CSS_SELECTOR, 'button[value="SHARED"]').click()
-        buttons[0].click()  # close the search for type to be able to open the new one
+        # Close the type filter so the next one can open.
+        buttons[0].click()
 
-        ### PRICE
-        # Grab the current URL the browser is at
-        current_url = self.driver.current_url
-        new_url = current_url + f"&max_price={self.profile.max_rent}"
-        self.driver.get(new_url)
-
-        time.sleep(1)
-        time.sleep(TIME_DELAY_ON_LOAD)
+        # The price filter is applied through the URL.
+        self.driver.get(self.driver.current_url + f"&max_price={self.profile.max_rent}")
+        time.sleep(1 + TIME_DELAY_ON_LOAD)
         self.state = "SEARCHED"
 
-    def gather_results(self):
-        links = self.driver.find_elements(By.XPATH, "//a[@href]")
+    def gather_results(self) -> list[str]:
+        """
+        Collect the links to the listings on the results page.
+
+        :return: Unique listing URLs.
+        """
         valid_links = set()
-        for link in links:
-            url = link.get_attribute("href")
+        for link in self.driver.find_elements(By.XPATH, "//a[@href]"):
+            url = link.get_attribute("href") or ""
             if "en/flat/" in url:
                 valid_links.add(url)
+        return sorted(valid_links)
 
-        return list(valid_links)
+    def visit_and_gather(self, url: str) -> tuple[str, str]:
+        """
+        Open one listing and read its description and details table.
 
-    def visit_and_gather(self, url: str):
-        self.driver.get(url)
-
+        :param url: Listing URL from :meth:`gather_results`.
+        :return: Listing id and the listing's HTML.
+        :raises ValueError: If the URL has no listing id.
+        """
         match = re.search(r"en/flat/(.*?)/\d+/", url)
+        if not match:
+            raise ValueError(f"No listing id in {url}")
         advertisement_id = match.group(1)
 
+        self.driver.get(url)
         time.sleep(1)
 
         content = self.driver.find_element(By.CLASS_NAME, "markdown")
-        content_html = content.get_attribute("innerHTML")
         table = self.driver.find_element(
             By.CSS_SELECTOR, "table.table--rows.table--fluid.table--fixed.table--flush"
         )
-        table_html = table.get_attribute("innerHTML")
-        return advertisement_id, content_html + table_html
+        html = (content.get_attribute("innerHTML") or "") + (
+            table.get_attribute("innerHTML") or ""
+        )
+        return advertisement_id, html
 
-    def send_information(self, message):
-        # Create a requests session
+    def send_information(self, message: str) -> None:
+        """
+        Post the contact form of the current listing with the browser's session.
+
+        :param message: Body of the message to the landlord.
+        :raises SendError: If Flatfox does not accept the request.
+        """
         session = requests.Session()
-
-        # Get CSRF token from the form
-        csrf_token_element = self.driver.find_element(By.NAME, "csrfmiddlewaretoken")
-        csrf_token = csrf_token_element.get_attribute("value")
-
-        # Transfer cookies from Selenium to requests
-        selenium_cookies = self.driver.get_cookies()
-        for cookie in selenium_cookies:
+        csrf_token = self.driver.find_element(
+            By.NAME, "csrfmiddlewaretoken"
+        ).get_attribute("value")
+        for cookie in self.driver.get_cookies():
             session.cookies.set(cookie["name"], cookie["value"])
 
-        # Prepare headers
-        headers = {
-            "Referer": self.driver.current_url,
-            "User-Agent": "Mozilla/5.0",
-        }
-
-        self.profile
+        headers = {"Referer": self.driver.current_url, "User-Agent": "Mozilla/5.0"}
         form_data = {
             "csrfmiddlewaretoken": csrf_token,
             "name": self.profile.user_name,
@@ -129,14 +155,20 @@ class FlatfoxWebInteractor:
             "text": message,
             "create_subscription": "off",
         }
-
-        # Submit POST request to the current page
-        post_url = self.driver.current_url
-        session.post(post_url, data=form_data, headers=headers)
-        # response = session.post(post_url, data=form_data, headers=headers)
-        # print("✅ Submitted!" if response.ok else f"❌ Failed with {response.status_code}")
-
+        try:
+            response = session.post(
+                self.driver.current_url, data=form_data, headers=headers, timeout=30
+            )
+        except requests.RequestException as error:
+            raise SendError(f"Flatfox request failed: {error}") from error
+        if not response.ok:
+            raise SendError(
+                f"Flatfox rejected the message: HTTP {response.status_code}"
+            )
         time.sleep(10)
 
-    def close(self):
+    def close(self) -> None:
+        """
+        Quit Chrome.
+        """
         self.driver.quit()

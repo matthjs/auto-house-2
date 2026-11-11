@@ -26,8 +26,11 @@ markers = [
 ]
 
 [tool.ruff]
-line-length = 120
+line-length = 88
 target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
 
 [dependency-groups]
 dev = [
