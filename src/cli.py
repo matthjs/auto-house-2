@@ -14,8 +14,9 @@ from typing import Any
 from omegaconf import DictConfig, OmegaConf
 
 from src.agent import ApplicationAgent, FitAssessment
+from src.digest import compose, mark_notified, pending, recipients
 from src.lib.commute import CommuteClient, Place
-from src.lib.email_client import EmailError
+from src.lib.email_client import EmailClient, EmailError
 from src.lib.errors import SendError
 from src.lib.logger import logger, setup_logging
 from src.lib.tracker import Tracker
@@ -23,7 +24,16 @@ from src.llm import LLMError, LLMProvider, create_provider
 from src.search_profile import Person, ProfileError, SearchProfile
 from src.sites import SITES, Listing, SiteRunner
 
-COMMANDS = ("search", "show", "mark", "send", "run", "status", "check-llm")
+COMMANDS = (
+    "search",
+    "show",
+    "mark",
+    "send",
+    "run",
+    "digest",
+    "status",
+    "check-llm",
+)
 DECISIONS = ("sent", "rejected", "skipped", "drafted")
 
 
@@ -301,6 +311,44 @@ def cmd_run(cfg: DictConfig) -> int:
     return 0
 
 
+def cmd_digest(cfg: DictConfig) -> int:
+    """
+    Email the search's members the drafts from every site that were not in a digest
+    yet. Only members are emailed, never landlords.
+
+    With ``digest.enabled`` false (the default) the email is printed instead and
+    nothing is remembered.
+
+    :param cfg: Composed config with ``digest.enabled``, ``digest.min_fit`` and
+        ``digest.note``.
+    :return: Exit code.
+    :raises ConfigError: If sending fails.
+    """
+    profile = build_profile(cfg)
+    settings = cfg.get("digest") or {}
+    items = pending(profile, int(settings.get("min_fit", cfg.min_fit)))
+    if not items:
+        print("Nothing new for the digest.")
+        return 0
+    subject, body = compose(profile, items, settings.get("note"))
+    to = recipients(profile)
+    if not settings.get("enabled", False):
+        who = ", ".join(to) or "nobody (no Email in the person files)"
+        print(
+            f"[digest off] Would email {who}\nSubject: {subject}\n\n{body}\n"
+            "Add digest.enabled=true to send."
+        )
+        return 0
+    profile.require("gmail_login", "gmail_password")
+    try:
+        EmailClient(profile).send_digest(to, subject, body)
+    except EmailError as error:
+        raise ConfigError(f"Digest not sent: {error}") from error
+    mark_notified(items)
+    print(f"Digest with {len(items)} listings sent to {', '.join(to)}.")
+    return 0
+
+
 def cmd_status(cfg: DictConfig) -> int:
     """
     Print one line per tracked listing, newest first, for every site.
@@ -354,6 +402,7 @@ def run_command(cfg: DictConfig) -> int:
         "mark": cmd_mark,
         "send": cmd_send,
         "run": cmd_run,
+        "digest": cmd_digest,
         "status": cmd_status,
         "check-llm": cmd_check_llm,
     }

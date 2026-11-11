@@ -12,6 +12,8 @@ from omegaconf import DictConfig
 import main
 from src.cli import build_profile, build_runner, run_command
 from src.lib.commute import CommuteClient, Place
+from src.lib.email_client import EmailClient
+from src.lib.tracker import Tracker
 from src.llm import DEFAULT_MODELS
 from src.migrate import MigrationError, migrate
 from src.sites import SITES
@@ -208,3 +210,74 @@ def test_places_from_config_turn_on_commute(workspace) -> None:
     assert build_runner(off, build_profile(off)).commute is None
     no_places = load_config(workspace, "site=flatfox")
     assert build_runner(no_places, build_profile(no_places)).commute is None
+
+
+def save_draft(workspace: Path, listing_id: str, score: int, status="drafted") -> None:
+    """
+    Store a batch-mode draft on Flatfox for the ``anna_ben`` search.
+
+    :param workspace: Folder from the ``workspace`` fixture.
+    :param listing_id: Listing id.
+    :param score: Fit score.
+    :param status: Record status.
+    """
+    tracker = Tracker(workspace / "data" / "anna_ben", "flatfox.ch")
+    tracker.save(
+        listing_id,
+        status,
+        url=f"https://flatfox.ch/{listing_id}/",
+        text="Rooms: 3.5\nRent per month (CHF): 2400\nA bright flat.",
+        commute="Commute by public transport:\n- ETH: 15 min (Ben)",
+        fit={"score": score, "reasons": ["Near ETH"], "red_flags": []},
+        subject="Wohnung",
+        response="Guten Tag, wir interessieren uns für die Wohnung.",
+        review_issues=["Too short"] if status == "needs_review" else [],
+    )
+
+
+def test_digest_is_printed_until_enabled(workspace, capsys) -> None:
+    save_draft(workspace, "1", 85)
+    assert run_command(load_config(workspace, "command=digest")) == 0
+    out = capsys.readouterr().out
+    assert "[digest off] Would email a@x.ch" in out
+    assert "Rent per month (CHF): 2400" in out and "ETH: 15 min (Ben)" in out
+    assert "Guten Tag" in out
+    tracker = Tracker(workspace / "data" / "anna_ben", "flatfox.ch")
+    assert "notified_at" not in tracker.get("1")
+
+
+def test_digest_emails_members_once(workspace, capsys, monkeypatch) -> None:
+    save_draft(workspace, "1", 85)
+    save_draft(workspace, "2", 70, status="needs_review")
+    save_draft(workspace, "3", 40)
+    save_draft(workspace, "4", 90, status="skipped")
+    monkeypatch.setenv("GMAIL_ADDRESS", "anna@gmail.com")
+    monkeypatch.setenv("GMAIL_APP_PASSWORD", "app-password")
+    sent = []
+
+    def fake_send(self, recipients, subject, content, bcc_self) -> None:
+        sent.append((recipients, subject, content, bcc_self))
+
+    monkeypatch.setattr(EmailClient, "_send", fake_send)
+    cfg = load_config(
+        workspace, "command=digest", "digest.enabled=true", "digest.note='Test run'"
+    )
+    assert run_command(cfg) == 0
+    [(to, subject, body, bcc)] = sent
+    assert body.startswith("Test run\n")
+    assert to == ["a@x.ch"] and not bcc
+    assert subject == "auto-house: 2 new listings"
+    assert body.index("Fit 85") < body.index("Fit 70")
+    assert "needs a check before sending: Too short" in body
+    assert "flatfox.ch/3/" not in body and "flatfox.ch/4/" not in body
+
+    capsys.readouterr()
+    assert run_command(cfg) == 0
+    assert len(sent) == 1
+    assert "Nothing new" in capsys.readouterr().out
+
+
+def test_digest_needs_gmail_to_send(workspace) -> None:
+    save_draft(workspace, "1", 85)
+    cfg = load_config(workspace, "command=digest", "digest.enabled=true")
+    assert run_command(cfg) == 1

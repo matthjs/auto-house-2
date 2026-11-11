@@ -111,3 +111,9 @@ def test_saved_draft_is_reused_without_llm_calls(profile) -> None:
     assert site.sent and site.tracker.get("a")["status"] == "sent"
     history = [h["status"] for h in site.tracker.get("a")["history"]]
     assert history == ["drafted", "sent"]
+
+
+def test_batch_run_saves_listing_text(profile) -> None:
+    site = make_site(profile, [listing("a")])
+    site.run()
+    assert site.tracker.get("a")["text"] == "Room, 800 CHF"

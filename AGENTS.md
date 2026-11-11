@@ -40,7 +40,9 @@ uv run python main.py search=<s> site=<site> command=show listing=<id>
 uv run python main.py search=<s> site=<site> command=mark listing=<id> decision=<d>
 uv run python main.py search=<s> site=<site> command=send listing=<id> message_file=<f>
 uv run python main.py search=<s> site=<site> command=run            # batch mode
+uv run python main.py search=<s> command=digest                     # email members new drafts (printed unless digest.enabled=true)
 uv run python main.py search=<s> command=check-llm                  # one tiny paid call
+scripts/daily.sh                                                    # daily job: run on each site, then digest
 ```
 
 Config groups: `search` (`conf/search/<name>.yaml`, lists `members` from
@@ -56,9 +58,10 @@ documented in
 - **`dry_run=false` only with the user's explicit OK for that exact action**, in this
   conversation. One approval covers one listing. Never send, and never mark a listing
   as sent, without it.
-- **Never run `command=search` or `command=run` unless the user
-  asks in this conversation.** They visit real sites, may log in with the user's
-  accounts, and batch mode spends API credits.
+- **Never run `command=search`, `command=run`, `scripts/daily.sh` or
+  `command=digest digest.enabled=true` unless the user asks in this conversation.**
+  They visit real sites, may log in with the user's accounts, spend API credits or
+  send email.
 - **Never run `pytest -m live`** unless the user asks; it calls paid APIs.
 - **Never try to get around a site's bot protection** (CAPTCHAs such as Cloudflare
   Turnstile, rate limits, blocks). Sites with a bot check are draft-only.
@@ -87,6 +90,8 @@ documented in
 3. Settings belong in `conf/` (Hydra), not in constants or new CLI flags. Add a new
    top-level setting to `conf/config.yaml` with a comment, and read it in `src/cli.py`.
    Anything that acts on the outside world or changes a decision must obey `dry_run`.
+   The one exception is the digest, which only emails the search's own members and
+   has its own opt-in switch (`digest.enabled`); it must never email anyone else.
 4. Prompt wording lives in `prompts/*.md`, used by batch mode and by the `find-housing`
    skill. Change it there, not in Python strings. The JSON shape of batch answers is
    defined by the Pydantic models in `src/agent.py`.
@@ -169,7 +174,10 @@ main.py                     Hydra entry point; loads .env, AUTO_HOUSE_* defaults
 conf/config.yaml            defaults list + top-level settings (command, dry_run, ...)
 conf/{search,person}/       a search lists members (person files); personal, ignored
 conf/{llm,site}/            config groups
-src/cli.py                  commands: search, show, mark, send, run, status, check-llm
+src/cli.py                  commands: search, show, mark, send, run, digest, status,
+                            check-llm
+src/digest.py               digest email of new drafts to the search's members
+scripts/daily.sh            daily job (cron): batch run per site, then digest
 src/search_profile.py       SearchProfile + Person; credentials and API keys from env
 src/agent.py                batch agent: evaluate -> draft -> review (+ redraft)
 src/llm/                    providers: base.py, openai_compat.py (OpenAI, DeepSeek),

@@ -15,6 +15,7 @@ defaults:
 # mark:      record a decision (needs listing=<id> decision=sent|rejected|skipped|drafted)
 # send:      email an approved message, email sites only (needs listing=, message_file=)
 # run:       batch mode, the built-in LLM agent drafts every open listing
+# digest:    email the search's members the new drafts from every site
 # status:    what happened to each listing
 # check-llm: one small paid call to test the API key and model
 command: status
@@ -32,6 +33,14 @@ note: null
 # to apply at.
 max_sends: 5
 min_fit: 60
+
+# command=digest: one email to the search's own members (the Email in their person
+# files, sent from the contact's Gmail) with every new draft at or above min_fit.
+# Never emails landlords. While enabled is false the email is only printed.
+digest:
+  enabled: false
+  min_fit: 60
+  note: null       # extra line at the top, e.g. digest.note='Test run'
 
 # Public transport time from each listing to the search's places (from the search
 # file), via the free Swiss timetable API transport.opendata.ch. Looked up once per

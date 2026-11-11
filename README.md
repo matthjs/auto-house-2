@@ -17,7 +17,7 @@ You talk to a coding agent (Claude Code or Codex) and it does the searching with
 
 Every listing gets a record in `data/<search>/<site>/` with its status (`found`, `skipped`, `drafted`, `needs_review`, `failed`, `rejected`, `sent`), the URL, the text, the fit and the message. A listing is never contacted twice, even if several people share a search.
 
-There's also a **batch mode** without the chat: `uv run python main.py site=wgzimmer command=run` lets an API model (DeepSeek, Claude or OpenAI) judge and draft every new listing in one cheap run, for example as a daily job. You review the drafts later.
+There's also a **batch mode** without the chat: `uv run python main.py site=wgzimmer command=run` lets an API model (DeepSeek, Claude or OpenAI) judge and draft every new listing in one cheap run. Run it as a daily job with [scripts/daily.sh](scripts/daily.sh) and everyone in the search gets one **email digest** with the new flats, their commute times and the drafts, ready to send yourself (see [Daily job with an email digest](#daily-job-with-an-email-digest)).
 
 **Dry run is on by default.** Nothing is sent, and no listing is marked as sent or rejected, unless the command gets `dry_run=false`. The agent only adds that after your OK for that one listing. (Searching and drafting still save their results in `data/`, so nothing is lost or paid for twice.)
 
@@ -93,6 +93,18 @@ A message file has an optional `Subject: ...` first line, then the message. Set 
 | `openai` | `gpt-6-luna` | `OPENAI_API_KEY` |
 
 Without `llm=`, the first provider whose key is set is used (in the order above). Pick another model with `llm.model=...`. Check a key with one small paid call: `uv run python main.py search=<name> command=check-llm`.
+
+### Daily job with an email digest
+
+[scripts/daily.sh](scripts/daily.sh) runs batch mode on Flatfox and the email alerts, then `command=digest`. The digest emails every member of the search (the `Email` in their person file, sent from the contact's Gmail with `GMAIL_ADDRESS` and `GMAIL_APP_PASSWORD`) one message with the new drafts: fit, rent, commute, link and the draft to copy. Each listing appears in one digest only, and no email goes out when nothing is new. The digest never emails landlords; you still send each message yourself.
+
+```bash
+uv run python main.py command=digest      # print the digest (digest.enabled is false by default)
+scripts/daily.sh                          # the job: drafts, then sends the digest
+crontab -e                                # add: 0 7 * * * /path/to/auto-house-2/scripts/daily.sh >> /path/to/auto-house-2/out/daily.log 2>&1
+```
+
+On WSL, cron runs only while WSL is running, and its service may need `sudo service cron start`.
 
 Batch mode uses the instructions in [prompts/](prompts/): `evaluate.md` (fit rubric), `draft.md` (how to write) and `review.md` (the checklist). The `find-housing` skill uses the same files, so editing them changes both.
 

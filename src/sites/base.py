@@ -322,5 +322,9 @@ class SiteRunner(ABC):
         )
         if listing.id in self._commutes:
             extra["commute"] = self._commutes[listing.id]
+        record = self.tracker.get(listing.id)
+        has_text = "text" in fields or (record and record.get("text"))
+        if listing.content and not has_text:
+            extra["text"] = html_to_text(listing.content)
         self.tracker.save(listing.id, status, url=listing.url, **extra, **fields)
         self.summary[status] += 1
