@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run pytest:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv sync:*)"
+    ],
+    "ask": [
+      "Bash(uv run python main.py:*)",
+      "Bash(python main.py:*)",
+      "Bash(uv run pytest -m live:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Edit(./.env)"
+    ]
+  }
+}

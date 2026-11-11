@@ -1,0 +1,48 @@
+# Main config. Override anything on the command line, for example:
+#   uv run python main.py search=<name> site=flatfox command=search
+# Show the final config without running: add --cfg job
+
+defaults:
+  - search: ???           # conf/search/<name>.yaml (or AUTO_HOUSE_SEARCH in .env)
+  - llm: deepseek         # conf/llm/: deepseek, claude, openai (batch mode only)
+  - site: null            # conf/site/: wgzimmer, flatfox, wohnen_ethz
+  - _self_
+  - override hydra/job_logging: none
+  - override hydra/hydra_logging: none
+
+# search:    find open listings on a site and print them as JSON (contacts nobody)
+# show:      print one listing's record (needs listing=<id>)
+# mark:      record a decision (needs listing=<id> decision=sent|rejected|skipped|drafted)
+# send:      email an approved message, email sites only (needs listing=, message_file=)
+# run:       batch mode, the built-in LLM agent drafts every open listing
+# status:    what happened to each listing
+# check-llm: one small paid call to test the API key and model
+command: status
+
+# Safety switch. While true, nothing is sent and mark/send only show what they would
+# do. Set dry_run=false on the one command you really want to act.
+dry_run: true
+
+listing: null
+decision: null
+message_file: null
+note: null
+
+# Batch mode (command=run): most messages sent per run, and lowest fit score (0-100)
+# to apply at.
+max_sends: 5
+min_fit: 60
+
+# Person files, and listing records under <data_dir>/<search_name>/<site>/.
+person_dir: conf/person
+data_dir: data
+search_name: ${hydra:runtime.choices.search}
+verbose: false
+
+# No per-run output folders, and stay in the repository directory.
+hydra:
+  output_subdir: null
+  run:
+    dir: .
+  job:
+    chdir: false

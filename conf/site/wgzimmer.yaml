@@ -1,0 +1,4 @@
+# Runner registered under this name in src/sites/__init__.py.
+name: wgzimmer
+# Result pages to read per search (24 listings each).
+max_pages: 3

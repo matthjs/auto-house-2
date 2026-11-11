@@ -1,0 +1,18 @@
+# Runner registered under this name in src/sites/__init__.py.
+# Reads saved-search alert emails from the contact's Gmail (GMAIL_ADDRESS and
+# GMAIL_APP_PASSWORD in .env). Set up the alerts on each portal first.
+name: email_alerts
+# How many days of emails to read.
+days: 7
+# sender: text in the From address. listing_pattern: regex matching a listing URL,
+# with the listing id as group 1. Adjust a pattern if a portal changes its links.
+portals:
+  - name: homegate
+    sender: homegate.ch
+    listing_pattern: 'homegate\.ch/(?:[a-z]{2}/)?(?:rent|mieten|buy|kaufen|louer|affittare)/(\d{6,})'
+  - name: immoscout24
+    sender: immoscout24.ch
+    listing_pattern: 'immoscout24\.ch/[^\s"?#]*?/(\d{6,})(?:[/?#]|$)'
+  - name: comparis
+    sender: comparis.ch
+    listing_pattern: 'comparis\.ch/immobilien/[^\s"?#]*?/(\d{6,})(?:[/?#]|$)'

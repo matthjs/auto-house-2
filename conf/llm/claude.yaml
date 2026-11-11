@@ -1,0 +1,3 @@
+# API key: ANTHROPIC_API_KEY in .env.
+provider: claude
+model: claude-opus-5-5

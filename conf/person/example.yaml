@@ -1,0 +1,14 @@
+# One file per person: conf/person/<name>.yaml. Personal files are git-ignored;
+# only this example is tracked. Passwords and API keys never go here (use .env).
+# The agent only uses facts from here, so the more you add, the better the messages.
+description:
+  Name: ""
+  Nationality: ""
+  Age: ""
+  Occupation: ""
+  Languages_spoken: ""
+  Phone_number: ""
+  Email: ""
+  LinkedIn_profile: ""
+  Likes: ""
+  Lifestyle: ""

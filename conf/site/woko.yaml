@@ -1,0 +1,3 @@
+# Runner registered under this name in src/sites/__init__.py.
+# WOKO's free student rooms in Zurich (only students can rent from WOKO).
+name: woko
