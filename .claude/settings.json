@@ -10,15 +10,15 @@
       "Bash(make check)"
     ],
     "ask": [
-      "Bash(uv run python main.py run:*)",
-      "Bash(python main.py run:*)",
+      "Bash(uv run python main.py:*)",
+      "Bash(python main.py:*)",
       "Bash(make me-have-a-house:*)",
       "Bash(make dry-run:*)",
       "Bash(uv run pytest -m live:*)"
     ],
     "deny": [
-      "Read(./secret/**/site_credentials.json)",
-      "Edit(./secret/**/site_credentials.json)"
+      "Read(./.env)",
+      "Edit(./.env)"
     ]
   }
 }

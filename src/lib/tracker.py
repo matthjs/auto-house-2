@@ -36,7 +36,7 @@ class Tracker:
     """
     Read and write the record of each listing on one site.
 
-    Records live in ``secret/<name>/data/<site>/<listing id>.json``. Files written by
+    Records live in ``data/<name>/<site>/<listing id>.json``. Files written by
     the earlier version of this project have no ``status`` field; they are treated
     as ``sent`` so those listings are never contacted twice. File names starting
     with ``_`` are working files, not records.

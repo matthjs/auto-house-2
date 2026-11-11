@@ -36,9 +36,9 @@ Create `src/sites/<site>.py` with a `SiteRunner` subclass (see `src/sites/flatfo
 - Set `site` to the domain; it is also the data folder name.
 - `required_fields()` lists the profile fields needed, with contact/sending fields only when `self.mode != "dry-run"`.
 - `listings()` yields `Listing` objects and logs and skips listings that fail to load.
-- Register it in `SITES` in `src/sites/__init__.py`.
+- Register it in `SITES` in `src/sites/__init__.py` and add `conf/site/<key>.yaml` with `name: <key>` (the file name and key must match).
 
-New credentials go in `secret/example/site_credentials.json` (empty values) and `PersonalProfile`.
+New logins or passwords go in `.env.example` (empty values) and `CREDENTIAL_ENV` in `src/personal_profile.py`. Never put credentials in `conf/`.
 
 ## Step 4: Tests and checks
 

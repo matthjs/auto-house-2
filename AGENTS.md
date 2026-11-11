@@ -24,30 +24,41 @@ make test                    # offline tests (uv run pytest)
 make format                  # ruff format + ruff check --fix
 make check                   # what CI runs: format check, lint, tests
 
-uv run python main.py --help
-uv run python main.py check-llm --profile <name> --provider deepseek   # one tiny paid call
-uv run python main.py status --profile <name>                          # what was done per listing
-uv run python main.py run --profile <name> --site wgzimmer --mode dry-run
+# Configuration is Hydra (conf/). Show the fully composed config instead of reading
+# single YAML files, because defaults compose:
+uv run python main.py profile=example site=flatfox --cfg job
+
+uv run python main.py profile=<name> command=check-llm        # one tiny paid call
+uv run python main.py profile=<name> command=status           # what was done per listing
+uv run python main.py profile=<name> site=flatfox             # run (dry-run by default)
 ```
 
-Sites: `wgzimmer`, `flatfox`, `wohnen-ethz`. Providers: `deepseek` (default), `openai`,
-`claude`. Modes: `dry-run` (default, never sends), `confirm` (asks before each send),
-`auto` (sends drafts that pass review, capped by `--max-sends`).
+Config groups: `profile` (`conf/profile/<name>.yaml`), `llm` (`deepseek` default,
+`openai`, `claude`), `site` (`wgzimmer`, `flatfox`, `wohnen_ethz`). Top-level settings:
+`command` (`run`, `status`, `check-llm`), `mode` (`dry-run` default, `confirm`, `auto`),
+`max_sends`, `min_fit`, `data_dir`. Override any value on the command line, for example
+`llm.model=deepseek-v4-pro`.
 
 ## Rules
 
 ### Safety
 
-- **Never run `main.py run` or `make me-have-a-house`/`make dry-run` unless the user asks
-  in this conversation.** These open real sites and log in with the user's accounts. Even
-  dry-run spends LLM credits.
-- **Never use `--mode auto`, and never send a message**, unless the user explicitly asks
-  for it. Do not raise `--max-sends` above what the user said.
+- **Never run `command=run` (the default) or `make me-have-a-house`/`make dry-run` unless
+  the user asks in this conversation.** These open real sites and log in with the user's
+  accounts. Even dry-run spends LLM credits.
+- **Never use `mode=auto`, and never send a message**, unless the user explicitly asks
+  for it. Do not raise `max_sends` above what the user said.
 - **Never run `pytest -m live`** unless the user asks; it calls paid APIs.
-- **`secret/` holds personal data.** Never read `site_credentials.json`, and never print,
-  log, paste or commit anything under `secret/` except `secret/example/`, whose values
-  must stay empty. Read other files there only when the user asks for it.
-- **Never delete or rewrite `secret/<name>/data/`.** Those records stop the agent from
+- **Never try to get around a site's bot protection** (CAPTCHAs such as Cloudflare
+  Turnstile, rate limits, blocks). If a site needs one, stop and tell the user.
+- **`.env` holds the user's passwords and API keys.** Never read, print or edit it; to
+  document a new variable, add it to `.env.example` with an empty value. Credentials
+  are only ever read from environment variables, never from config files.
+- **`conf/profile/<name>.yaml` and `data/` hold personal data.** Never print, log, paste
+  or commit them. Only `conf/profile/example.yaml` is tracked, and its values stay
+  empty. Read personal files only when the user asks for it. Old `secret/` folders
+  (pre-Hydra layout) fall under the same rule.
+- **Never delete or rewrite `data/<name>/`.** Those records stop the agent from
   contacting a listing twice. Legacy records without a `status` count as `sent`; keep that.
 - A listing may only be recorded as `sent` after the send call returned without error.
   Scrapers must raise `SendError` (or `EmailError`) on failure, never fail silently.
@@ -62,18 +73,21 @@ Sites: `wgzimmer`, `flatfox`, `wohnen-ethz`. Providers: `deepseek` (default), `o
 2. Keep site-specific logic in `src/lib/*_web_interactor.py` and `src/sites/<site>.py`.
    Decisions (apply, send, record) belong in `src/sites/base.py` and `src/agent.py`, shared
    by every site.
-3. Prompt wording lives in `prompts/*.md`. Change prompts there, not in Python strings.
+3. Settings belong in `conf/` (Hydra), not in constants or new CLI flags. Add a new
+   top-level setting to `conf/config.yaml` with a comment, and read it in `src/cli.py`.
+4. Prompt wording lives in `prompts/*.md`. Change prompts there, not in Python strings.
    The JSON shape of each answer is defined by the Pydantic models in `src/agent.py`.
-4. New LLM providers subclass `LLMProvider` in `src/llm/`, return a validated Pydantic
+5. New LLM providers subclass `LLMProvider` in `src/llm/`, return a validated Pydantic
    object, raise `LLMError` on any failure, and never send `temperature` or other sampling
    parameters (current Claude and OpenAI models reject them). Register them in
-   `src/llm/__init__.py` (`DEFAULT_MODELS`, `create_provider`) and `API_KEY_SOURCES` in
-   `src/personal_profile.py`.
-5. To add a website, follow `.claude/commands/add-site.md` (`/add-site <url>` in Claude Code).
-6. Tests must run offline: use `ScriptedLLM`, `FakeSite` and the `profile` fixture from
-   `tests/conftest.py`. Mark anything that needs the network or real keys with
+   `src/llm/__init__.py` (`DEFAULT_MODELS`, `create_provider`), `API_KEY_ENV` in
+   `src/personal_profile.py`, `.env.example`, and add `conf/llm/<name>.yaml`.
+6. To add a website, follow `.claude/commands/add-site.md` (`/add-site <url>` in Claude Code).
+7. Tests must run offline: use `ScriptedLLM`, `FakeSite`, `isolate_env` and the `profile`
+   fixture from `tests/conftest.py`, and `load_config` in `tests/test_cli.py` to compose
+   the real config. Mark anything that needs the network or real keys with
    `@pytest.mark.live`.
-7. Selectors in the scrapers cannot be checked without the live site. If you change one,
+8. Selectors in the scrapers cannot be checked without the live site. If you change one,
    say so to the user and give them the dry-run command to verify it.
 
 ### Code style
@@ -109,7 +123,7 @@ Sites: `wgzimmer`, `flatfox`, `wohnen-ethz`. Providers: `deepseek` (default), `o
   functions may skip the docstring when their name says what they check.
 - No decorative separator comments (`# ---- Sites ----` or boxed banners).
 - Use `logger` from `src/lib/logger.py`, not `print`, except for direct prompts to the
-  user in `confirm` mode and CLI output.
+  user in `confirm` mode and command output.
 
 ### Verification checklist
 
@@ -117,23 +131,25 @@ Before saying a change is done, check each point and report pass/fail to the use
 
 - [ ] `make check` passes (formatting, lint, offline tests).
 - [ ] New behaviour has an offline test; a bug fix has a test that failed before it.
-- [ ] Nothing under `secret/` (other than empty `secret/example/` templates) is staged.
+- [ ] No `.env`, `data/`, `secret/` or personal `conf/profile/*.yaml` is staged.
 - [ ] No path can record `sent` without a successful send, or send in `dry-run` mode.
-- [ ] README.md, this file and `secret/example/` match any changed command, option or
-      profile field.
+- [ ] README.md, this file, `conf/`, `.env.example` and `conf/profile/example.yaml`
+      match any changed command, setting, environment variable or profile field.
 - [ ] Scraper selector changes are listed for the user to verify with a dry run.
 
 ### Git
 
 - Work on a branch; do not commit to `main` directly.
 - Commit messages: `type: summary` (`feat`, `fix`, `docs`, `build`, `test`, `refactor`).
-- Commit or push only when the user asks.
+- Commit, amend or push only when the user explicitly says so.
 
 ## Codebase map
 
 ```
-main.py                     entry point -> src/cli.py
-src/cli.py                  argparse CLI: run, status, check-llm
+main.py                     Hydra entry point; loads .env, AUTO_HOUSE_* group defaults
+conf/config.yaml            defaults list + top-level settings (command, mode, ...)
+conf/{llm,site,profile}/    config groups; profile/<name>.yaml is personal (ignored)
+src/cli.py                  composed config -> run / status / check-llm
 src/agent.py                ApplicationAgent: evaluate -> draft -> review (+ redraft);
                             FitAssessment/Draft/Review schemas; html_to_text, wrap_listing
 src/llm/                    providers: base.py (LLMProvider, LLMError), openai_compat.py
@@ -143,9 +159,10 @@ src/sites/{wg_zimmer,flatfox,wohnen_ethz}.py   per-site runners; SITES in __init
 src/lib/*_web_interactor.py Selenium scrapers (selectors live here)
 src/lib/email_client.py     Gmail SMTP send, IMAP login-code reader
 src/lib/tracker.py          per-listing JSON records with status and history
-src/personal_profile.py     loads secret/<name>/*.json; API keys from env or JSON
+src/personal_profile.py     PersonalProfile; credentials and API keys from env
+src/migrate.py              one-time copy from the old secret/<name>/ layout
+.env.example                every environment variable, empty (copy to .env)
 prompts/*.md                system prompts for evaluate, draft, review
 tests/                      offline tests; conftest.py has ScriptedLLM, FakeSite
-secret/example/             empty profile templates (the only tracked part of secret/)
-secret/<name>/data/<site>/  listing records (never delete; see Safety)
+data/<name>/<site>/         listing records (ignored; never delete, see Safety)
 ```

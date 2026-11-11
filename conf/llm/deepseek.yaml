@@ -1,0 +1,3 @@
+# API key: DEEPSEEK_API_KEY in .env. Other model: llm.model=deepseek-v4-pro
+provider: deepseek
+model: deepseek-flash

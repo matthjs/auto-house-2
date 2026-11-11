@@ -1,5 +1,11 @@
-secret/*
-!secret/example/
+# Personal data: your profile config, listing records and secrets.
+conf/profile/*
+!conf/profile/example.yaml
+data/
+.env
+# Old layout (before conf/ + data/); kept ignored so it is never committed.
+secret/
+
 logs/*
 out/*
 __pycache__/

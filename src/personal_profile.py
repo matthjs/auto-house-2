@@ -1,131 +1,136 @@
 """
-Load a user's description, living preferences and credentials from ``secret/<name>/``.
+A user's profile: description and living preferences from ``conf/profile/<name>.yaml``,
+passwords and API keys from environment variables (normally set in ``.env``).
 """
 
-import json
 import os
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-SECRET_DIR = Path("secret")
+PROFILE_DIR = Path("conf/profile")
+DATA_DIR = Path("data")
 
-API_KEY_SOURCES: dict[str, tuple[str, tuple[str, ...]]] = {
-    "deepseek": ("DeepSeek_API_KEY", ("DEEPSEEK_API_KEY",)),
-    "openai": ("OpenAI_API_KEY", ("OPENAI_API_KEY",)),
-    "claude": ("Anthropic_API_KEY", ("ANTHROPIC_API_KEY",)),
+# Profile attribute -> environment variable holding it.
+CREDENTIAL_ENV: dict[str, str] = {
+    "wohnen_ethz_login": "WOHNEN_ETHZ_LOGIN",
+    "wohnen_ethz_password": "WOHNEN_ETHZ_PASSWORD",
+    "flatfox_login": "FLATFOX_LOGIN",
+    "flatfox_password": "FLATFOX_PASSWORD",
+    "gmail_login": "GMAIL_ADDRESS",
+    "gmail_password": "GMAIL_APP_PASSWORD",
+    "gmail_login2": "CODE_INBOX_ADDRESS",
+    "gmail_password2": "CODE_INBOX_APP_PASSWORD",
+}
+API_KEY_ENV: dict[str, str] = {
+    "deepseek": "DEEPSEEK_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "claude": "ANTHROPIC_API_KEY",
 }
 
 
 class ProfileError(ValueError):
     """
-    Raised when a profile file is missing or a required field is empty.
+    Raised when a required profile field or credential is empty.
     """
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """
-    Read one JSON file of a profile.
-
-    :param path: File to read.
-    :return: The parsed JSON object.
-    :raises ProfileError: If the file does not exist.
-    """
-    if not path.is_file():
-        raise ProfileError(
-            f"Missing {path}. Copy secret/example/ to secret/<name>/ and fill it in."
-        )
-    with path.open(encoding="utf-8") as f:
-        return json.load(f)
 
 
 class PersonalProfile:
     """
     Everything the agent knows about one user.
 
-    Reads three files from ``secret/<name>/``: ``my_description.json`` (who the user
-    is), ``living_preferences.json`` (what they are looking for) and
-    ``site_credentials.json`` (logins and API keys). Credentials are optional at load
-    time and checked with :meth:`require` when a site or provider needs them.
+    ``description`` (who the user is) and ``preferences`` (what they are looking for)
+    come from the user's profile config. Logins, passwords and API keys come only
+    from environment variables (see :data:`CREDENTIAL_ENV` and :data:`API_KEY_ENV`).
+    Credentials are optional at load time and checked with :meth:`require` when a
+    site or provider needs them.
     """
 
-    def __init__(self, name: str, secret_dir: Path = SECRET_DIR) -> None:
+    def __init__(
+        self,
+        name: str,
+        description: Mapping[str, Any],
+        preferences: Mapping[str, Any],
+        data_root: Path = DATA_DIR,
+    ) -> None:
         """
-        Load a profile from disk.
+        Build a profile.
 
-        :param name: Folder name under ``secret_dir``.
-        :param secret_dir: Root folder that holds all profiles.
-        :raises ProfileError: If a file is missing or a required field is empty.
+        :param name: Profile name; also the folder name under ``data_root``.
+        :param description: Facts about the user, used in every message.
+        :param preferences: Budget, place and other search preferences.
+        :param data_root: Root folder for listing records.
+        :raises ProfileError: If ``budget_upper_bound`` is not set.
         """
         self.name = name
-        self.directory = Path(secret_dir) / name
+        self.config_path = PROFILE_DIR / f"{name}.yaml"
+        self.data_root = Path(data_root)
 
-        description = _load_json(self.directory / "my_description.json")
-        self.description: dict[str, Any] = description
-        self.user_name: str = description.get("Name", "")
-        self.user_phone_number: str = description.get("Phone_number", "")
-        self.user_email: str = description.get("Email", "")
+        self.description: dict[str, Any] = dict(description)
+        self.user_name: str = str(self.description.get("Name") or "")
+        self.user_phone_number: str = str(self.description.get("Phone_number") or "")
+        self.user_email: str = str(self.description.get("Email") or "")
 
-        preferences = _load_json(self.directory / "living_preferences.json")
-        self.preferences: dict[str, Any] = preferences
-        self.place: str = preferences.get("place", "")
-        self.place_wg_zimmer: str = preferences.get("place_wg_zimmer", "")
-        budget = str(preferences.get("budget_upper_bound", "")).strip()
+        self.preferences: dict[str, Any] = dict(preferences)
+        self.place: str = str(self.preferences.get("place") or "")
+        self.place_wg_zimmer: str = str(self.preferences.get("place_wg_zimmer") or "")
+        budget = str(self.preferences.get("budget_upper_bound") or "").strip()
         if not budget:
             raise ProfileError(
-                f"Set 'budget_upper_bound' in {self.directory}/living_preferences.json"
+                f"Set preferences.budget_upper_bound in {self.config_path}"
             )
         self.max_rent: int = int(float(budget))
         # wgzimmer.ch only offers its price filter in steps of 50.
         self.max_rent_wg_zimmer: int = (self.max_rent + 49) // 50 * 50
 
-        credentials = _load_json(self.directory / "site_credentials.json")
-        self.credentials: dict[str, str] = credentials
-        self.wohnen_ethz_login: str = credentials.get("wohnen_ethz_login", "")
-        self.wohnen_ethz_password: str = credentials.get("wohnen_ethz_password", "")
-        self.flatfox_login: str = credentials.get("flatfox_login", "")
-        self.flatfox_password: str = credentials.get("flatfox_password", "")
-        self.gmail_login: str = credentials.get("login", "")
-        self.gmail_password: str = credentials.get("password", "")
-        self.gmail_login2: str = credentials.get("login2", "")
-        self.gmail_password2: str = credentials.get("password2", "")
+        self.wohnen_ethz_login = ""
+        self.wohnen_ethz_password = ""
+        self.flatfox_login = ""
+        self.flatfox_password = ""
+        self.gmail_login = ""
+        self.gmail_password = ""
+        self.gmail_login2 = ""
+        self.gmail_password2 = ""
+        for attribute, env_var in CREDENTIAL_ENV.items():
+            setattr(self, attribute, os.environ.get(env_var, ""))
 
     @property
     def data_dir(self) -> Path:
         """
         Folder that holds the per-site records of listings this user has handled.
 
-        :return: ``secret/<name>/data``.
+        :return: ``<data_root>/<name>``.
         """
-        return self.directory / "data"
+        return self.data_root / self.name
 
     def require(self, *fields: str) -> None:
         """
         Check that profile attributes are filled in.
 
         :param fields: Attribute names, for example ``"flatfox_login"``.
-        :raises ProfileError: If any of them is empty.
+        :raises ProfileError: If any of them is empty; the message says where to set
+            each one.
         """
         missing = [field for field in fields if not getattr(self, field, "")]
-        if missing:
-            raise ProfileError(
-                f"Profile '{self.name}' is missing: {', '.join(missing)}. "
-                f"Fill them in under {self.directory}/."
-            )
+        if not missing:
+            return
+        in_env = [CREDENTIAL_ENV[f] for f in missing if f in CREDENTIAL_ENV]
+        in_config = [f for f in missing if f not in CREDENTIAL_ENV]
+        parts = []
+        if in_env:
+            parts.append(f"set {', '.join(in_env)} in .env")
+        if in_config:
+            parts.append(f"fill in {', '.join(in_config)} in {self.config_path}")
+        raise ProfileError(f"Profile '{self.name}' is incomplete: {'; '.join(parts)}.")
 
     def api_key(self, provider: str) -> str | None:
         """
         Find the API key for an LLM provider.
 
-        Environment variables win over ``site_credentials.json``.
-
         :param provider: One of ``deepseek``, ``openai``, ``claude``.
-        :return: The key, or ``None`` if none is set.
+        :return: The key, or ``None`` if its environment variable is not set.
         """
-        json_key, env_vars = API_KEY_SOURCES[provider]
-        for env_var in env_vars:
-            if os.environ.get(env_var):
-                return os.environ[env_var]
-        return self.credentials.get(json_key) or None
+        return os.environ.get(API_KEY_ENV[provider]) or None
 
     def description_text(self) -> str:
         """
@@ -144,11 +149,11 @@ class PersonalProfile:
         return _render(self.preferences)
 
 
-def _render(data: dict[str, Any]) -> str:
+def _render(data: Mapping[str, Any]) -> str:
     """
-    Turn a flat dict into ``key: value`` lines, skipping empty values.
+    Turn a flat mapping into ``key: value`` lines, skipping empty values.
 
-    :param data: Dict to render.
+    :param data: Mapping to render.
     :return: One line per non-empty field.
     """
     return "\n".join(f"{key}: {value}" for key, value in data.items() if value)

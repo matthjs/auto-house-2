@@ -1,0 +1,3 @@
+# API key: OPENAI_API_KEY in .env.
+provider: openai
+model: gpt-6-luna

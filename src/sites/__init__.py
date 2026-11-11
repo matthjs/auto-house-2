@@ -10,7 +10,7 @@ from src.sites.wohnen_ethz import WohnenETHZRunner
 SITES: dict[str, type[SiteRunner]] = {
     "wgzimmer": WGZimmerRunner,
     "flatfox": FlatfoxRunner,
-    "wohnen-ethz": WohnenETHZRunner,
+    "wohnen_ethz": WohnenETHZRunner,
 }
 
 __all__ = ["MODES", "SITES", "Listing", "Mode", "SiteRunner"]

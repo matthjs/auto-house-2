@@ -1,139 +1,104 @@
 """
-Command-line interface: ``run`` a site, show ``status``, or ``check-llm``.
+Run a command from a composed Hydra config: ``run``, ``status`` or ``check-llm``.
 """
 
-import argparse
-import os
-import sys
 from collections import Counter
+from pathlib import Path
+
+from omegaconf import DictConfig, OmegaConf
 
 from src.agent import ApplicationAgent, FitAssessment
 from src.lib.logger import logger, setup_logging
 from src.lib.tracker import Tracker
-from src.llm import DEFAULT_MODELS, PROVIDERS, LLMError, create_provider
+from src.llm import LLMError, LLMProvider, create_provider
 from src.personal_profile import PersonalProfile, ProfileError
 from src.sites import MODES, SITES
 
-DEFAULT_PROVIDER = os.environ.get("AUTO_HOUSE_PROVIDER", "deepseek")
-DEFAULT_PROFILE = os.environ.get("AUTO_HOUSE_PROFILE")
+COMMANDS = ("run", "status", "check-llm")
 
 
-def _add_profile_arg(parser: argparse.ArgumentParser) -> None:
+class ConfigError(ValueError):
     """
-    Add the ``--profile`` option.
-
-    :param parser: Sub-command parser to extend.
+    Raised when the config asks for something that does not exist.
     """
-    parser.add_argument(
-        "--profile",
-        default=DEFAULT_PROFILE,
-        required=DEFAULT_PROFILE is None,
-        help="Folder name under secret/ (default: $AUTO_HOUSE_PROFILE).",
+
+
+def build_profile(cfg: DictConfig) -> PersonalProfile:
+    """
+    Create the profile selected in the config.
+
+    :param cfg: Composed config with ``profile``, ``profile_name`` and ``data_dir``.
+    :return: The profile, with credentials read from the environment.
+    """
+    profile_cfg = OmegaConf.to_container(cfg.profile, resolve=True)
+    return PersonalProfile(
+        name=cfg.profile_name,
+        description=profile_cfg.get("description") or {},
+        preferences=profile_cfg.get("preferences") or {},
+        data_root=Path(cfg.data_dir),
     )
 
 
-def _add_llm_args(parser: argparse.ArgumentParser) -> None:
+def build_llm(cfg: DictConfig, profile: PersonalProfile) -> LLMProvider:
     """
-    Add the ``--provider`` and ``--model`` options.
+    Create the LLM provider selected in the config.
 
-    :param parser: Sub-command parser to extend.
+    :param cfg: Composed config with ``llm.provider`` and ``llm.model``.
+    :param profile: Profile, used to look up the API key.
+    :return: The provider.
+    :raises ConfigError: If the provider is unknown.
     """
-    parser.add_argument(
-        "--provider",
-        choices=PROVIDERS,
-        default=DEFAULT_PROVIDER,
-        help="LLM provider (default: $AUTO_HOUSE_PROVIDER or deepseek).",
-    )
-    parser.add_argument(
-        "--model",
-        help="Model id; defaults per provider: "
-        + ", ".join(f"{p}={m}" for p, m in DEFAULT_MODELS.items()),
-    )
+    provider = cfg.llm.provider
+    try:
+        return create_provider(provider, profile.api_key(provider), cfg.llm.model)
+    except ValueError as error:
+        raise ConfigError(str(error)) from error
 
 
-def build_parser() -> argparse.ArgumentParser:
+def cmd_run(cfg: DictConfig) -> int:
     """
-    Define the command-line arguments.
+    Run the agent over the selected site.
 
-    :return: The parser.
-    """
-    parser = argparse.ArgumentParser(
-        prog="auto-house",
-        description="Find housing listings and draft applications with an LLM agent.",
-    )
-    parser.add_argument("-v", "--verbose", action="store_true", help="Show debug logs.")
-    commands = parser.add_subparsers(dest="command", required=True)
-
-    run = commands.add_parser("run", help="Search a site and handle new listings.")
-    _add_profile_arg(run)
-    _add_llm_args(run)
-    run.add_argument("--site", choices=sorted(SITES), required=True)
-    run.add_argument(
-        "--mode",
-        choices=MODES,
-        default="dry-run",
-        help="dry-run: draft only (default). confirm: ask before each send. "
-        "auto: send drafts that pass review.",
-    )
-    run.add_argument(
-        "--max-sends", type=int, default=5, help="Most messages per run in auto mode."
-    )
-    run.add_argument(
-        "--min-fit", type=int, default=60, help="Lowest fit score (0-100) to apply at."
-    )
-
-    status = commands.add_parser("status", help="Show what the agent did per listing.")
-    _add_profile_arg(status)
-    status.add_argument("--site", choices=sorted(SITES), help="Only this site.")
-
-    check = commands.add_parser("check-llm", help="Make one small call to the LLM.")
-    _add_profile_arg(check)
-    _add_llm_args(check)
-    return parser
-
-
-def cmd_run(args: argparse.Namespace) -> int:
-    """
-    Run the agent over one site.
-
-    :param args: Parsed arguments.
+    :param cfg: Composed config.
     :return: Exit code.
+    :raises ConfigError: If no site or an unknown mode is chosen.
     """
-    profile = PersonalProfile(args.profile)
-    llm = create_provider(args.provider, profile.api_key(args.provider), args.model)
-    agent = ApplicationAgent(profile, llm, min_fit=args.min_fit)
-    runner = SITES[args.site](profile, agent, mode=args.mode, max_sends=args.max_sends)
+    if cfg.get("site") is None:
+        raise ConfigError(f"Choose a site: site={'|'.join(SITES)}")
+    if cfg.mode not in MODES:
+        raise ConfigError(f"Unknown mode '{cfg.mode}'. Choose from: {', '.join(MODES)}")
+    profile = build_profile(cfg)
+    llm = build_llm(cfg, profile)
+    agent = ApplicationAgent(profile, llm, min_fit=cfg.min_fit)
+    runner = SITES[cfg.site.name](
+        profile, agent, mode=cfg.mode, max_sends=cfg.max_sends
+    )
     logger.info(
-        "Running %s in %s mode with %s (%s)", args.site, args.mode, llm.name, llm.model
+        "Running %s in %s mode with %s (%s)",
+        cfg.site.name,
+        cfg.mode,
+        llm.name,
+        llm.model,
     )
     summary = runner.run()
-    print(
-        "Summary:",
-        ", ".join(f"{k}={v}" for k, v in sorted(summary.items())) or "nothing new",
-    )
+    counts = ", ".join(f"{k}={v}" for k, v in sorted(summary.items()))
+    print("Summary:", counts or "nothing new")
     return 0
 
 
-def cmd_status(args: argparse.Namespace) -> int:
+def cmd_status(cfg: DictConfig) -> int:
     """
-    Print one line per tracked listing, newest first.
+    Print one line per tracked listing, newest first, for every site.
 
-    :param args: Parsed arguments.
+    :param cfg: Composed config.
     :return: Exit code.
     """
-    profile = PersonalProfile(args.profile)
-    sites = [args.site] if args.site else sorted(SITES)
-    for key in sites:
-        tracker = Tracker(profile.data_dir, SITES[key].site)
-        records = tracker.records()
+    profile = build_profile(cfg)
+    for runner in SITES.values():
+        records = Tracker(profile.data_dir, runner.site).records()
         counts = Counter(record["status"] for record in records)
-        print(
-            f"\n{SITES[key].site}: "
-            + (
-                ", ".join(f"{s}={n}" for s, n in sorted(counts.items()))
-                or "no listings yet"
-            )
-        )
+        totals = ", ".join(f"{s}={n}" for s, n in sorted(counts.items()))
+        print(f"\n{runner.site}: {totals or 'no listings yet'}")
         for record in records:
             score = (record.get("fit") or {}).get("score", "-")
             when = record.get("updated_at", "legacy")
@@ -142,15 +107,14 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_check_llm(args: argparse.Namespace) -> int:
+def cmd_check_llm(cfg: DictConfig) -> int:
     """
-    Make one tiny structured call to check the key and model.
+    Make one tiny structured call to check the API key and model.
 
-    :param args: Parsed arguments.
+    :param cfg: Composed config.
     :return: Exit code.
     """
-    profile = PersonalProfile(args.profile)
-    llm = create_provider(args.provider, profile.api_key(args.provider), args.model)
+    llm = build_llm(cfg, build_profile(cfg))
     answer = llm.generate(
         "Rate how well the listing fits a student with a budget of 900 CHF.",
         "<listing>Room in a shared flat in Zurich, 850 CHF, available now.</listing>",
@@ -162,22 +126,21 @@ def cmd_check_llm(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def run_command(cfg: DictConfig) -> int:
     """
-    Parse arguments and run the chosen command.
+    Set up logging and run the command named in ``cfg.command``.
 
-    :param argv: Arguments; defaults to ``sys.argv[1:]``.
-    :return: Exit code (0 on success, 1 on a profile or LLM error).
+    :param cfg: Composed config.
+    :return: Exit code (0 on success, 1 on a config, profile or LLM error).
     """
-    args = build_parser().parse_args(argv)
-    setup_logging(verbose=args.verbose)
+    setup_logging(verbose=cfg.verbose)
     commands = {"run": cmd_run, "status": cmd_status, "check-llm": cmd_check_llm}
     try:
-        return commands[args.command](args)
-    except (ProfileError, LLMError) as error:
+        if cfg.command not in commands:
+            raise ConfigError(
+                f"Unknown command '{cfg.command}'. Choose from: {', '.join(COMMANDS)}"
+            )
+        return commands[cfg.command](cfg)
+    except (ConfigError, ProfileError, LLMError) as error:
         logger.error("%s", error)
         return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

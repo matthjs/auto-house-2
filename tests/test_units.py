@@ -22,18 +22,19 @@ def test_profile_loads_and_rounds_wgzimmer_budget(profile) -> None:
     assert "Name: Test Student" in profile.description_text()
 
 
-def test_profile_require_names_missing_fields(profile) -> None:
-    profile.require("gmail_login")
-    with pytest.raises(ProfileError, match="flatfox_login"):
+def test_profile_require_says_where_to_set_each_field(profile) -> None:
+    profile.require("gmail_login", "gmail_password")
+    with pytest.raises(ProfileError, match="FLATFOX_LOGIN in .env"):
         profile.require("flatfox_login", "gmail_login")
+    profile.place = ""
+    with pytest.raises(ProfileError, match="fill in place"):
+        profile.require("place")
 
 
-def test_api_key_prefers_environment(profile, monkeypatch) -> None:
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-    assert profile.api_key("deepseek") == "from-json"
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "from-env")
-    assert profile.api_key("deepseek") == "from-env"
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+def test_credentials_and_api_keys_come_from_environment(profile) -> None:
+    assert profile.gmail_login == "me@gmail.com"
+    assert profile.flatfox_login == ""
+    assert profile.api_key("deepseek") == "test-key"
     assert profile.api_key("openai") is None
 
 

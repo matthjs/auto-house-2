@@ -2,7 +2,6 @@
 Shared fixtures: a throwaway profile, a scripted LLM and an in-memory site.
 """
 
-import json
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -12,45 +11,58 @@ from pydantic import BaseModel
 from src.agent import Draft, FitAssessment, Review
 from src.lib.errors import SendError
 from src.llm.base import LLMProvider, SchemaT
-from src.personal_profile import PersonalProfile
+from src.personal_profile import API_KEY_ENV, CREDENTIAL_ENV, PersonalProfile
 from src.sites.base import Listing, SiteRunner
 
 GOOD_MESSAGE = " ".join(["Hello, I am a student and would love to live here."] * 8)
 
 
 @pytest.fixture
-def profile(tmp_path: Path) -> PersonalProfile:
+def profile(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PersonalProfile:
     """
-    Write a complete profile to a temporary ``secret/`` folder and load it.
+    Build a profile whose records go to a temporary folder, with test credentials in
+    the environment (any real ones are cleared).
 
     :param tmp_path: Pytest's temporary directory.
-    :return: The loaded profile.
+    :param monkeypatch: Pytest's monkeypatch, used to isolate environment variables.
+    :return: The profile.
     """
-    directory = tmp_path / "secret" / "tester"
-    directory.mkdir(parents=True)
-    files = {
-        "my_description.json": {
+    isolate_env(monkeypatch)
+    monkeypatch.setenv("GMAIL_ADDRESS", "me@gmail.com")
+    monkeypatch.setenv("GMAIL_APP_PASSWORD", "test-password")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    return PersonalProfile(
+        "tester",
+        description={
             "Name": "Test Student",
             "Phone_number": "+41 00 000 00 00",
             "Email": "student@example.com",
             "Occupation": "MSc student",
         },
-        "living_preferences.json": {
+        preferences={
             "place_wg_zimmer": "zurich-stadt",
             "place": "Zurich",
-            "budget_upper_bound": "920",
+            "budget_upper_bound": 920,
             "deal_breakers": "",
         },
-        "site_credentials.json": {
-            "flatfox_login": "",
-            "login": "me@gmail.com",
-            "password": "app-password",
-            "DeepSeek_API_KEY": "from-json",
-        },
-    }
-    for name, content in files.items():
-        (directory / name).write_text(json.dumps(content), encoding="utf-8")
-    return PersonalProfile("tester", secret_dir=tmp_path / "secret")
+        data_root=tmp_path / "data",
+    )
+
+
+def isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Remove every credential, API key and default variable from the environment.
+
+    Values are set again by pytest after the test, including ones a test set itself
+    (for example through ``load_dotenv``).
+
+    :param monkeypatch: Pytest's monkeypatch.
+    """
+    env_vars = [*CREDENTIAL_ENV.values(), *API_KEY_ENV.values()]
+    for env_var in [*env_vars, "AUTO_HOUSE_PROFILE", "AUTO_HOUSE_LLM"]:
+        # setenv first so pytest records the original state and restores it.
+        monkeypatch.setenv(env_var, "")
+        monkeypatch.delenv(env_var)
 
 
 def fit(score: int = 85, recommendation: str = "apply") -> FitAssessment:
