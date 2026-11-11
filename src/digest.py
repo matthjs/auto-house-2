@@ -81,6 +81,7 @@ def format_entry(site: str, record: dict[str, Any], with_draft: bool = True) -> 
     if record.get("commute"):
         parts += [f"  {line}" for line in record["commute"].splitlines()]
     parts += [f"  + {reason}" for reason in fit.get("reasons") or []]
+    parts += [f"  - {downside}" for downside in fit.get("downsides") or []]
     parts += [f"  ! {flag}" for flag in fit.get("red_flags") or []]
     if not with_draft or not record.get("response"):
         return "\n".join(parts)

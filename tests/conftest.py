@@ -83,6 +83,7 @@ def fit(score: int = 85, recommendation: str = "apply") -> FitAssessment:
         recommendation=recommendation,
         language="English",
         reasons=["Within budget"],
+        downsides=[],
         red_flags=[],
     )
 

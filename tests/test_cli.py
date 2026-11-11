@@ -228,7 +228,12 @@ def save_draft(workspace: Path, listing_id: str, score: int, status="drafted") -
         url=f"https://flatfox.ch/{listing_id}/",
         text="Rooms: 3.5\nRent per month (CHF): 2400\nA bright flat.",
         commute="Commute by public transport:\n- ETH: 15 min (Ben)",
-        fit={"score": score, "reasons": ["Near ETH"], "red_flags": []},
+        fit={
+            "score": score,
+            "reasons": ["Near ETH"],
+            "downsides": ["Starts in February"],
+            "red_flags": [],
+        },
         subject="Wohnung",
         response="Guten Tag, wir interessieren uns für die Wohnung.",
         review_issues=["Too short"] if status == "needs_review" else [],
@@ -274,6 +279,7 @@ def test_digest_emails_members_once(workspace, capsys, monkeypatch) -> None:
     assert subject == "auto-house: 2 new listings"
     assert body.index("Fit 85") < body.index("Fit 70")
     assert "needs a check before sending: Too short" in body
+    assert "  + Near ETH\n  - Starts in February" in body
     assert "flatfox.ch/3/" not in body and "flatfox.ch/4/" not in body
 
     capsys.readouterr()

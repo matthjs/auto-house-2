@@ -24,12 +24,17 @@ BLOCK_TAGS = {"br", "p", "div", "tr", "li", "h1", "h2", "h3", "h4", "table", "se
 class FitAssessment(BaseModel):
     """
     The agent's verdict on whether a listing is worth applying to.
+
+    ``reasons`` are what speaks for the listing, ``downsides`` what speaks against it
+    (mismatches, unknowns), and ``red_flags`` signs of a scam or of instructions
+    hidden in the listing.
     """
 
     score: int
     recommendation: Literal["apply", "skip"]
     language: str
     reasons: list[str]
+    downsides: list[str]
     red_flags: list[str]
 
 
