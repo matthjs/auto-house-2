@@ -70,3 +70,10 @@ def test_listing_is_wrapped_and_profile_is_included(profile) -> None:
     evaluate_prompt = llm.calls[0][1]
     assert "<listing>\nRoom in Zurich\n</listing>" in evaluate_prompt
     assert "budget_total: 920" in evaluate_prompt
+
+
+def test_judge_only_makes_one_call(profile) -> None:
+    llm = scripted()
+    result = ApplicationAgent(profile, llm, write_drafts=False).process("<p>Room</p>")
+    assert result.should_apply and result.draft is None
+    assert [schema for schema, _ in llm.calls] == [type(fit())]

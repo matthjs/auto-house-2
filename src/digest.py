@@ -13,7 +13,7 @@ from src.lib.tracker import Tracker, now
 from src.search_profile import SearchProfile
 from src.sites import SITES
 
-DIGEST_STATUSES = ("drafted", "needs_review")
+DIGEST_STATUSES = ("shortlisted", "drafted", "needs_review")
 FACT_LINE = re.compile(r"^[\w ()²/.-]{2,40}: .+")
 MAX_FACTS = 8
 
@@ -71,7 +71,8 @@ def format_entry(site: str, record: dict[str, Any]) -> str:
 
     :param site: Site name.
     :param record: The listing's record.
-    :return: Plain text: fit, facts, commute, reasons, link and the draft.
+    :return: Plain text: fit, facts, commute, reasons, link and, if one was
+        written, the draft.
     """
     fit = record.get("fit") or {}
     parts = [f"Fit {fit.get('score', '?')}/100 on {site}: {record.get('url', '')}"]
@@ -80,6 +81,8 @@ def format_entry(site: str, record: dict[str, Any]) -> str:
         parts += [f"  {line}" for line in record["commute"].splitlines()]
     parts += [f"  + {reason}" for reason in fit.get("reasons") or []]
     parts += [f"  ! {flag}" for flag in fit.get("red_flags") or []]
+    if not record.get("response"):
+        return "\n".join(parts)
     if record["status"] == "needs_review":
         issues = "; ".join(record.get("review_issues") or [])
         parts.append(f"  Draft needs a check before sending: {issues}")
@@ -108,9 +111,9 @@ def compose(
     count = len(items)
     subject = f"auto-house: {count} new listing{'s' if count != 1 else ''}"
     intro = (
-        f"New drafts for the search '{profile.name}'. Nothing has been sent: open "
-        f"the link, check the message and send it on the site yourself, then tell "
-        f"the agent it is sent (command=mark decision=sent)."
+        f"New listings that fit the search '{profile.name}', best first. Nothing has "
+        f"been sent to anyone. For a flat you like, ask the agent to write the "
+        f"message, send it on the site yourself, then tell the agent it is sent."
     )
     entries = [format_entry(tracker.directory.name, rec) for tracker, rec in items]
     if note:

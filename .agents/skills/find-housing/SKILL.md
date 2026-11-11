@@ -28,7 +28,7 @@ uv run python main.py search=<search> site=<site> command=search
 
 This prints the open listings as JSON (id, url, text, contact_email) and saves them as `found`. It contacts nobody. Logs go to stderr.
 
-If there are many listings (more than about 15) and the user wants to save their own usage, offer batch mode instead: `command=run` lets the configured API model (DeepSeek, Claude or OpenAI) judge and draft all of them cheaply, still without sending. Then continue from Step 3 with the saved drafts (`command=status`, `command=show listing=<id>`).
+If there are many listings (more than about 15) and the user wants to save their own usage, offer batch mode instead: `command=run` lets the configured API model (DeepSeek, Claude or OpenAI) judge all of them cheaply and mark the good ones `shortlisted` (with `batch_drafts=true` it also drafts a message for each). Then show the shortlisted ones from `command=status` and `command=show listing=<id>` as the Step 2 table, and continue from Step 3 for the ones the user picks. The daily digest email also lists shortlisted flats; when the user names one from it, draft it with Step 3.
 
 ## Step 2: Judge the fit
 

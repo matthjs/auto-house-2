@@ -231,6 +231,11 @@ class SiteRunner(ABC):
             self._record(listing, "skipped", reason="No contact email on the listing")
             return
 
+        record = self.tracker.get(listing.id)
+        if record and record["status"] == "shortlisted" and not self.agent.write_drafts:
+            self.summary["already_judged"] += 1
+            return
+
         draft = self._saved_draft(listing)
         if draft is None:
             try:
@@ -242,6 +247,9 @@ class SiteRunner(ABC):
             draft = self._draft_fields(result)
             if not result.should_apply:
                 self._record(listing, "skipped", **draft)
+                return
+            if result.draft is None:
+                self._record(listing, "shortlisted", **draft)
                 return
 
         ready = not draft.get("review_issues")

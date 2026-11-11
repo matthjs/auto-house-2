@@ -40,7 +40,7 @@ uv run python main.py search=<s> site=<site> command=show listing=<id>
 uv run python main.py search=<s> site=<site> command=mark listing=<id> decision=<d>
 uv run python main.py search=<s> site=<site> command=send listing=<id> message_file=<f>
 uv run python main.py search=<s> site=<site> command=run            # batch mode
-uv run python main.py search=<s> command=digest                     # email members new drafts (printed unless digest.enabled=true)
+uv run python main.py search=<s> command=digest                     # email members new good listings (printed unless digest.enabled=true)
 uv run python main.py search=<s> command=check-llm                  # one tiny paid call
 scripts/daily.sh                                                    # daily job: run on each site, then digest
 ```
@@ -176,7 +176,7 @@ conf/{search,person}/       a search lists members (person files); personal, ign
 conf/{llm,site}/            config groups
 src/cli.py                  commands: search, show, mark, send, run, digest, status,
                             check-llm
-src/digest.py               digest email of new drafts to the search's members
+src/digest.py               digest email of new good listings to the search's members
 scripts/daily.sh            daily job (cron): batch run per site, then digest
 src/search_profile.py       SearchProfile + Person; credentials and API keys from env
 src/agent.py                batch agent: evaluate -> draft -> review (+ redraft)

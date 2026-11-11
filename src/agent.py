@@ -57,22 +57,24 @@ class AgentResult:
     """
     Everything the agent produced for one listing.
 
-    ``draft`` and ``review`` are ``None`` when the listing was skipped.
+    ``draft`` and ``review`` are ``None`` when the listing was skipped, or when it
+    fits but the agent only judges (``write_drafts=False``).
     """
 
     assessment: FitAssessment
     draft: Draft | None = None
     review: Review | None = None
     attempts: int = 0
+    fits: bool = False
 
     @property
     def should_apply(self) -> bool:
         """
-        Whether the agent decided to apply.
+        Whether the listing is worth applying to.
 
-        :return: ``True`` if a draft was written.
+        :return: ``True`` if the fit check recommends it at or above ``min_fit``.
         """
-        return self.draft is not None
+        return self.fits
 
     @property
     def ready_to_send(self) -> bool:
@@ -213,6 +215,7 @@ class ApplicationAgent:
         llm: LLMProvider,
         min_fit: int = 60,
         max_attempts: int = 2,
+        write_drafts: bool = True,
     ) -> None:
         """
         Set up the agent for one user.
@@ -221,27 +224,34 @@ class ApplicationAgent:
         :param llm: Provider used for every step.
         :param min_fit: Lowest fit score (0-100) to apply at.
         :param max_attempts: Maximum number of drafts per listing.
+        :param write_drafts: Write and review a message for listings that fit; when
+            ``False`` the agent only judges the fit.
         """
         self.profile = profile
         self.llm = llm
         self.min_fit = min_fit
         self.max_attempts = max_attempts
+        self.write_drafts = write_drafts
         self.prompts = {
             name: load_prompt(name) for name in ("evaluate", "draft", "review")
         }
 
     def process(self, listing_text: str) -> AgentResult:
         """
-        Run the full evaluate-draft-review loop for one listing.
+        Run the evaluate-draft-review loop for one listing.
 
         :param listing_text: Listing HTML or text as scraped.
-        :return: The assessment and, if the agent applies, the final draft and review.
+        :return: The assessment and, if the listing fits and drafts are on, the final
+            draft and review.
         :raises LLMError: If a provider call fails.
         """
         listing = wrap_listing(html_to_text(listing_text))
         assessment = self.evaluate(listing)
         result = AgentResult(assessment=assessment)
         if assessment.recommendation != "apply" or assessment.score < self.min_fit:
+            return result
+        result.fits = True
+        if not self.write_drafts:
             return result
 
         feedback: list[str] = []

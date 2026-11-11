@@ -15,9 +15,9 @@ You talk to a coding agent (Claude Code or Codex) and it does the searching with
 3. **Draft.** For the ones you pick, it writes a short message in the listing's language, using only facts about you (and your flatmates, if you search together), and checks it against a review list.
 4. **You send.** You approve or tweak each message. On the websites you paste it in yourself (their contact forms have bot checks); for wohnen.ethz.ch it can email the landlord after your OK. Then it records the listing as sent.
 
-Every listing gets a record in `data/<search>/<site>/` with its status (`found`, `skipped`, `drafted`, `needs_review`, `failed`, `rejected`, `sent`), the URL, the text, the fit and the message. A listing is never contacted twice, even if several people share a search.
+Every listing gets a record in `data/<search>/<site>/` with its status (`found`, `skipped`, `shortlisted`, `drafted`, `needs_review`, `failed`, `rejected`, `sent`), the URL, the text, the fit and the message. A listing is never contacted twice, even if several people share a search.
 
-There's also a **batch mode** without the chat: `uv run python main.py site=wgzimmer command=run` lets an API model (DeepSeek, Claude or OpenAI) judge and draft every new listing in one cheap run. Run it as a daily job with [scripts/daily.sh](scripts/daily.sh) and everyone in the search gets one **email digest** with the new flats, their commute times and the drafts, ready to send yourself (see [Daily job with an email digest](#daily-job-with-an-email-digest)).
+There's also a **batch mode** without the chat: `uv run python main.py site=wgzimmer command=run` lets an API model (DeepSeek, Claude or OpenAI) judge every new listing in one cheap run and shortlist the good ones (messages are written in chat, only for the flats you pick; `batch_drafts=true` drafts them all). Run it as a daily job with [scripts/daily.sh](scripts/daily.sh) and everyone in the search gets one **email digest** with the new flats that fit, their rent and commute times (see [Daily job with an email digest](#daily-job-with-an-email-digest)).
 
 **Dry run is on by default.** Nothing is sent, and no listing is marked as sent or rejected, unless the command gets `dry_run=false`. The agent only adds that after your OK for that one listing. (Searching and drafting still save their results in `data/`, so nothing is lost or paid for twice.)
 
@@ -78,7 +78,7 @@ uv run python main.py search=<name> command=status                  # every list
 uv run python main.py search=<name> site=wgzimmer command=show listing=<id>
 uv run python main.py search=<name> site=wgzimmer command=mark listing=<id> decision=sent message_file=msg.md dry_run=false
 uv run python main.py search=<name> site=wohnen_ethz command=send listing=<id> message_file=msg.md   # shows the email; add dry_run=false to send
-uv run python main.py search=<name> site=wgzimmer command=run       # batch mode (drafts only)
+uv run python main.py search=<name> site=wgzimmer command=run       # batch mode: judge and shortlist, sends nothing
 uv run python main.py search=<name> site=wgzimmer --cfg job         # print the final config
 ```
 
@@ -96,11 +96,11 @@ Without `llm=`, the first provider whose key is set is used (in the order above)
 
 ### Daily job with an email digest
 
-[scripts/daily.sh](scripts/daily.sh) runs batch mode on Flatfox and the email alerts, then `command=digest`. The digest emails every member of the search (the `Email` in their person file, sent from the contact's Gmail with `GMAIL_ADDRESS` and `GMAIL_APP_PASSWORD`) one message with the new drafts: fit, rent, commute, link and the draft to copy. Each listing appears in one digest only, and no email goes out when nothing is new. The digest never emails landlords; you still send each message yourself.
+[scripts/daily.sh](scripts/daily.sh) runs batch mode on Flatfox and the email alerts, then `command=digest`. The digest emails every member of the search (the `Email` in their person file, sent from the contact's Gmail with `GMAIL_ADDRESS` and `GMAIL_APP_PASSWORD`) one message with the new flats that fit, best first: fit score and reasons, rent, rooms, start date, commute for each person and the link. Ask the agent to write the message for the ones you like. Each listing appears in one digest only, and no email goes out when nothing is new. The digest never emails landlords; you still send each message yourself.
 
 ```bash
 uv run python main.py command=digest      # print the digest (digest.enabled is false by default)
-scripts/daily.sh                          # the job: drafts, then sends the digest
+scripts/daily.sh                          # the job: judges, then sends the digest
 crontab -e                                # add: 0 7 * * * /path/to/auto-house-2/scripts/daily.sh >> /path/to/auto-house-2/out/daily.log 2>&1
 ```
 

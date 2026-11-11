@@ -33,6 +33,10 @@ note: null
 # to apply at.
 max_sends: 5
 min_fit: 60
+# Batch mode: false only judges the fit (one call per listing) and marks good ones
+# "shortlisted"; messages are then written in chat for the flats you pick. true also
+# writes and reviews a message for every listing that fits.
+batch_drafts: false
 
 # command=digest: one email to the search's own members (the Email in their person
 # files, sent from the contact's Gmail) with every new draft at or above min_fit.

@@ -117,3 +117,17 @@ def test_batch_run_saves_listing_text(profile) -> None:
     site = make_site(profile, [listing("a")])
     site.run()
     assert site.tracker.get("a")["text"] == "Room, 800 CHF"
+
+
+def test_judge_only_shortlists_once_and_never_sends(profile) -> None:
+    llm = scripted()
+    agent = ApplicationAgent(profile, llm, write_drafts=False)
+    site = FakeSite(profile, agent, listings=[listing("a")], dry_run=False)
+    assert site.run()["shortlisted"] == 1
+    record = site.tracker.get("a")
+    assert record["status"] == "shortlisted" and "response" not in record
+    assert site.sent == []
+
+    again = FakeSite(profile, agent, listings=[listing("a")], dry_run=False)
+    assert again.run()["already_judged"] == 1
+    assert len(llm.calls) == 1

@@ -296,7 +296,9 @@ def cmd_run(cfg: DictConfig) -> int:
     """
     profile = build_profile(cfg)
     llm = build_llm(cfg, profile)
-    agent = ApplicationAgent(profile, llm, min_fit=cfg.min_fit)
+    agent = ApplicationAgent(
+        profile, llm, min_fit=cfg.min_fit, write_drafts=bool(cfg.batch_drafts)
+    )
     runner = build_runner(cfg, profile, agent)
     logger.info(
         "Batch run on %s with %s (%s), dry_run=%s",

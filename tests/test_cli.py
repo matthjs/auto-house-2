@@ -281,3 +281,22 @@ def test_digest_needs_gmail_to_send(workspace) -> None:
     save_draft(workspace, "1", 85)
     cfg = load_config(workspace, "command=digest", "digest.enabled=true")
     assert run_command(cfg) == 1
+
+
+def test_digest_lists_shortlisted_without_a_draft(workspace, capsys) -> None:
+    tracker = Tracker(workspace / "data" / "anna_ben", "flatfox.ch")
+    tracker.save(
+        "7",
+        "shortlisted",
+        url="https://flatfox.ch/7/",
+        text="Rooms: 3\nRent per month (CHF): 2100",
+        fit={"score": 75, "reasons": ["Cheap"], "red_flags": []},
+    )
+    assert run_command(load_config(workspace, "command=digest")) == 0
+    out = capsys.readouterr().out
+    assert "Fit 75/100" in out and "Rent per month (CHF): 2100" in out
+    assert "Subject: Wohnung" not in out and "  Subject:" not in out
+
+
+def test_batch_mode_only_judges_by_default(workspace) -> None:
+    assert load_config(workspace).batch_drafts is False
