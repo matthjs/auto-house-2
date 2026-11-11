@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from src.lib.logger import logger
 from src.llm.base import LLMProvider
-from src.personal_profile import PersonalProfile
+from src.search_profile import SearchProfile
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 PLACEHOLDER_PATTERN = re.compile(r"\[[^\]]*\]|\{[^}]*\}|\bX{3,}\b|\bTODO\b|<[^>]+>")
@@ -209,7 +209,7 @@ class ApplicationAgent:
 
     def __init__(
         self,
-        profile: PersonalProfile,
+        profile: SearchProfile,
         llm: LLMProvider,
         min_fit: int = 60,
         max_attempts: int = 2,

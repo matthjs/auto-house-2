@@ -11,17 +11,17 @@ from pydantic import BaseModel
 from src.agent import Draft, FitAssessment, Review
 from src.lib.errors import SendError
 from src.llm.base import LLMProvider, SchemaT
-from src.personal_profile import API_KEY_ENV, CREDENTIAL_ENV, PersonalProfile
+from src.search_profile import API_KEY_ENV, CREDENTIAL_ENV, Person, SearchProfile
 from src.sites.base import Listing, SiteRunner
 
 GOOD_MESSAGE = " ".join(["Hello, I am a student and would love to live here."] * 8)
 
 
 @pytest.fixture
-def profile(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PersonalProfile:
+def profile(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SearchProfile:
     """
-    Build a profile whose records go to a temporary folder, with test credentials in
-    the environment (any real ones are cleared).
+    Build a one-person search whose records go to a temporary folder, with test
+    credentials in the environment (any real ones are cleared).
 
     :param tmp_path: Pytest's temporary directory.
     :param monkeypatch: Pytest's monkeypatch, used to isolate environment variables.
@@ -31,18 +31,23 @@ def profile(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PersonalProfile:
     monkeypatch.setenv("GMAIL_ADDRESS", "me@gmail.com")
     monkeypatch.setenv("GMAIL_APP_PASSWORD", "test-password")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
-    return PersonalProfile(
-        "tester",
-        description={
+    student = Person(
+        "student",
+        {
             "Name": "Test Student",
             "Phone_number": "+41 00 000 00 00",
             "Email": "student@example.com",
             "Occupation": "MSc student",
         },
+    )
+    return SearchProfile(
+        "tester",
+        members=[student],
+        contact="student",
         preferences={
-            "place_wg_zimmer": "zurich-stadt",
+            "place_wg_zimmer": "zuerich",
             "place": "Zurich",
-            "budget_upper_bound": 920,
+            "budget_total": 920,
             "deal_breakers": "",
         },
         data_root=tmp_path / "data",
@@ -59,7 +64,7 @@ def isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
     :param monkeypatch: Pytest's monkeypatch.
     """
     env_vars = [*CREDENTIAL_ENV.values(), *API_KEY_ENV.values()]
-    for env_var in [*env_vars, "AUTO_HOUSE_PROFILE", "AUTO_HOUSE_LLM"]:
+    for env_var in [*env_vars, "AUTO_HOUSE_SEARCH", "AUTO_HOUSE_LLM"]:
         # setenv first so pytest records the original state and restores it.
         monkeypatch.setenv(env_var, "")
         monkeypatch.delenv(env_var)

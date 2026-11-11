@@ -1,24 +1,21 @@
 """
-The run loop shared by all sites: find listings, let the agent decide, then send.
+The loop shared by all sites: find listings, record them, and (in batch mode) let the
+built-in agent draft and, if allowed, send.
 """
 
 from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
-from src.agent import AgentResult, ApplicationAgent
+from src.agent import AgentResult, ApplicationAgent, html_to_text
 from src.lib.email_client import EmailError
 from src.lib.errors import SendError
 from src.lib.logger import logger
 from src.lib.tracker import Tracker
 from src.llm.base import LLMError
-from src.personal_profile import PersonalProfile
-
-Mode = Literal["dry-run", "confirm", "auto"]
-MODES: tuple[Mode, ...] = ("dry-run", "confirm", "auto")
-REVIEW_FILE = "review"
+from src.search_profile import SearchProfile
 
 
 @dataclass
@@ -33,71 +30,72 @@ class Listing:
     contact_email: str | None = None
 
 
-class StopRun(Exception):
-    """
-    Raised when the user asks to stop during confirmation.
-    """
-
-
 class SiteRunner(ABC):
     """
-    Run the agent over one site's search results.
+    Search one site and handle its listings.
 
     Subclasses implement the site-specific steps (:meth:`start`, :meth:`listings`,
-    :meth:`send`, :meth:`close`). This class decides what happens to each listing:
+    :meth:`send`, :meth:`close`). Two ways to use a runner:
 
-    - ``dry-run`` (default): evaluate and draft, save the result, never send.
-    - ``confirm``: show each passing draft, let the user edit it, and send only on
-      an explicit yes.
-    - ``auto``: send drafts that passed review, at most ``max_sends`` per run.
+    - :meth:`collect` (``command=search``): save new listings and return them, so a
+      coding agent or the user can evaluate and draft them.
+    - :meth:`run` (``command=run``, batch mode): the built-in LLM agent evaluates and
+      drafts each new listing. With ``dry_run`` (default) nothing is sent; without
+      it, drafts that passed review are sent, at most ``max_sends`` per run, on sites
+      that allow sending (:attr:`can_send`).
 
     Listings with a final status (sent, rejected, skipped) are never processed again.
-    A draft saved by an earlier run is reused instead of being written again.
     """
 
     site: str = ""
     needs_contact_email: bool = False
+    can_send: bool = True
 
     def __init__(
         self,
-        profile: PersonalProfile,
-        agent: ApplicationAgent,
-        mode: Mode = "dry-run",
+        profile: SearchProfile,
+        agent: ApplicationAgent | None = None,
+        dry_run: bool = True,
         max_sends: int = 5,
-        ask: Callable[[str], str] = input,
+        options: dict[str, Any] | None = None,
     ) -> None:
         """
         Prepare a run.
 
-        :param profile: Whose search this is.
-        :param agent: Agent that evaluates and drafts.
-        :param mode: ``dry-run``, ``confirm`` or ``auto``.
-        :param max_sends: Most messages to send in one run (``auto`` mode).
-        :param ask: Function that asks the user a question; replaced in tests.
-        :raises ValueError: If ``mode`` is unknown.
+        :param profile: The search.
+        :param agent: Agent for batch mode; not needed for :meth:`collect`.
+        :param dry_run: Never send anything.
+        :param max_sends: Most messages to send in one batch run.
+        :param options: Site settings from ``conf/site/<site>.yaml``.
         """
-        if mode not in MODES:
-            raise ValueError(f"Unknown mode '{mode}'. Choose from: {', '.join(MODES)}")
         self.profile = profile
         self.agent = agent
-        self.mode = mode
+        self.dry_run = dry_run
         self.max_sends = max_sends
-        self.ask = ask
+        self.options = options or {}
         self.tracker = Tracker(profile.data_dir, self.site)
         self.summary: Counter[str] = Counter()
 
     @abstractmethod
     def required_fields(self) -> tuple[str, ...]:
         """
-        Profile fields this site needs in the current mode.
+        Profile fields needed to search this site.
 
-        :return: Attribute names of :class:`PersonalProfile`.
+        :return: Attribute names of :class:`SearchProfile`.
         """
+
+    def send_fields(self) -> tuple[str, ...]:
+        """
+        Profile fields needed to send a message on this site.
+
+        :return: Attribute names of :class:`SearchProfile`; none by default.
+        """
+        return ()
 
     @abstractmethod
     def start(self) -> None:
         """
-        Open the browser, log in and run the search.
+        Open the browser or session, log in if needed, and run the search.
         """
 
     @abstractmethod
@@ -105,13 +103,9 @@ class SiteRunner(ABC):
         """
         Yield the search results one by one.
 
-        The browser stays on a listing's page until the next one is requested, so
-        :meth:`send` can act on the current page.
-
         :return: Iterator over listings.
         """
 
-    @abstractmethod
     def send(self, listing: Listing, subject: str, message: str) -> None:
         """
         Deliver a message for a listing.
@@ -119,21 +113,23 @@ class SiteRunner(ABC):
         :param listing: The listing being answered.
         :param subject: Subject line (ignored by sites without one).
         :param message: Message body.
-        :raises SendError: If the site does not accept the message.
+        :raises SendError: If the site does not support or accept the message.
         :raises EmailError: If sending by email fails.
         """
+        raise SendError(f"{self.site} messages have to be sent by hand")
 
     @abstractmethod
     def close(self) -> None:
         """
-        Close the browser. Must be safe to call even if :meth:`start` failed.
+        Close the browser or session. Must be safe to call even if :meth:`start`
+        failed.
         """
 
-    def run(self) -> Counter[str]:
+    def _new_listings(self) -> Iterator[Listing]:
         """
-        Process every new listing, then close the browser.
+        Start the site and yield listings that are not handled for good yet.
 
-        :return: How many listings ended in each outcome.
+        :return: Iterator over open listings; the site is closed afterwards.
         :raises ProfileError: If a required profile field is empty.
         """
         self.profile.require(*self.required_fields())
@@ -141,26 +137,62 @@ class SiteRunner(ABC):
             self.start()
             for listing in self.listings():
                 if self.tracker.is_done(listing.id):
-                    logger.info("Skipping %s: already handled", listing.id)
                     self.summary["already_handled"] += 1
                     continue
-                self.handle(listing)
-                if self.mode == "auto" and self.summary["sent"] >= self.max_sends:
-                    logger.info("Reached --max-sends=%d; stopping", self.max_sends)
-                    break
-        except StopRun:
-            logger.info("Stopped by user")
+                yield listing
         finally:
             self.close()
+
+    def collect(self) -> list[dict[str, Any]]:
+        """
+        Save every open listing as ``found`` (keeping any draft) and return them.
+
+        :return: One dict per listing: site, id, url, text and contact email.
+        """
+        found = []
+        for listing in self._new_listings():
+            text = html_to_text(listing.content)
+            record = self.tracker.get(listing.id)
+            status = record["status"] if record else "found"
+            if record is None:
+                self._record(listing, status, text=text)
+            found.append(
+                {
+                    "site": self.site,
+                    "id": listing.id,
+                    "url": listing.url,
+                    "status": status,
+                    "contact_email": listing.contact_email,
+                    "text": text,
+                }
+            )
+        logger.info("Found %d open listings on %s", len(found), self.site)
+        return found
+
+    def run(self) -> Counter[str]:
+        """
+        Batch mode: let the built-in agent handle every open listing.
+
+        :return: How many listings ended in each outcome.
+        :raises ProfileError: If a required profile field is empty.
+        """
+        if self.agent is None:
+            raise ValueError("Batch mode needs an agent")
+        if not self.dry_run and self.can_send:
+            self.profile.require(*self.send_fields())
+        for listing in self._new_listings():
+            self.handle(listing)
+            if self.summary["sent"] >= self.max_sends:
+                logger.info("Reached max_sends=%d; stopping", self.max_sends)
+                break
         logger.info("Run summary for %s: %s", self.site, dict(self.summary))
         return self.summary
 
     def handle(self, listing: Listing) -> None:
         """
-        Decide what to do with one listing and record the outcome.
+        Evaluate, draft and possibly send one listing, and record the outcome.
 
         :param listing: A listing that has not been handled for good yet.
-        :raises StopRun: If the user asks to stop.
         """
         if self.needs_contact_email and not listing.contact_email:
             self._record(listing, "skipped", reason="No contact email on the listing")
@@ -180,15 +212,10 @@ class SiteRunner(ABC):
                 return
 
         ready = not draft.get("review_issues")
-        if self.mode == "dry-run":
-            self._record(listing, "drafted" if ready else "needs_review", **draft)
-        elif self.mode == "auto":
-            if ready:
-                self._send(listing, draft)
-            else:
-                self._record(listing, "needs_review", **draft)
+        if ready and not self.dry_run and self.can_send:
+            self._send(listing, draft)
         else:
-            self._confirm(listing, draft)
+            self._record(listing, "drafted" if ready else "needs_review", **draft)
 
     def _saved_draft(self, listing: Listing) -> dict[str, Any] | None:
         """
@@ -229,59 +256,6 @@ class SiteRunner(ABC):
             )
         return fields
 
-    def _confirm(self, listing: Listing, draft: dict[str, Any]) -> None:
-        """
-        Let the user edit the draft and choose to send, reject or postpone it.
-
-        :param listing: The listing.
-        :param draft: Draft fields.
-        :raises StopRun: If the user chooses to quit.
-        """
-        fit = draft.get("fit") or {}
-        path = self.tracker.write_working_file(
-            REVIEW_FILE,
-            {
-                "url": listing.url,
-                "fit_score": fit.get("score"),
-                "reasons": fit.get("reasons", []),
-                "red_flags": fit.get("red_flags", []),
-                "review_issues": draft.get("review_issues", []),
-                "subject": draft.get("subject", ""),
-                "response": draft.get("response", ""),
-            },
-        )
-        reasons = "; ".join(fit.get("reasons", []))
-        print(f"\n{listing.url}\nFit {fit.get('score')}/100: {reasons}")
-        if fit.get("red_flags"):
-            print(f"Red flags: {'; '.join(fit['red_flags'])}")
-        if draft.get("review_issues"):
-            print(f"Review issues: {'; '.join(draft['review_issues'])}")
-        print(f"Edit the draft in {path} if needed.")
-
-        while True:
-            answer = self.ask("[s]end / [r]eject / [l]ater / [q]uit: ").strip().lower()
-            if answer[:1] in {"s", "r", "l", "q"}:
-                break
-        edited = self.tracker.read_working_file(REVIEW_FILE)
-        draft = {
-            **draft,
-            "subject": edited.get("subject", ""),
-            "response": edited.get("response", ""),
-        }
-
-        if answer.startswith("s"):
-            self._send(listing, draft)
-        elif answer.startswith("r"):
-            self._record(listing, "rejected", **draft)
-        else:
-            self._record(
-                listing,
-                "needs_review" if draft.get("review_issues") else "drafted",
-                **draft,
-            )
-            if answer.startswith("q"):
-                raise StopRun
-
     def _send(self, listing: Listing, draft: dict[str, Any]) -> None:
         """
         Send a draft and record ``sent``, or ``failed`` if delivery fails.
@@ -315,4 +289,3 @@ class SiteRunner(ABC):
         )
         self.tracker.save(listing.id, status, url=listing.url, **extra, **fields)
         self.summary[status] += 1
-        logger.info("%s: %s", listing.id, status)

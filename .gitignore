@@ -1,6 +1,8 @@
 # Personal data: your profile config, listing records and secrets.
-conf/profile/*
-!conf/profile/example.yaml
+conf/person/*
+!conf/person/example.yaml
+conf/search/*
+!conf/search/example.yaml
 data/
 .env
 # Old layout (before conf/ + data/); kept ignored so it is never committed.

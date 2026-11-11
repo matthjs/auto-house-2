@@ -10,16 +10,69 @@ import pytest
 from src.agent import FitAssessment
 from src.lib.email_client import extract_otp, message_text
 from src.lib.tracker import Tracker
+from src.lib.wg_zimmer_client import listing_id, parse_listing, parse_results
 from src.lib.wohnen_ethz_web_interactor import pick_contact_email
 from src.llm import DEFAULT_MODELS, LLMError, create_provider
-from src.personal_profile import ProfileError
+from src.search_profile import Person, ProfileError, SearchProfile
 from tests.conftest import fit
 
 
-def test_profile_loads_and_rounds_wgzimmer_budget(profile) -> None:
+def test_profile_loads_budget_and_description(profile) -> None:
     assert profile.max_rent == 920
-    assert profile.max_rent_wg_zimmer == 950
+    assert not profile.is_group
     assert "Name: Test Student" in profile.description_text()
+    assert profile.preferences_text().startswith("people: 1")
+
+
+def test_group_search_uses_contact_and_describes_everyone(tmp_path) -> None:
+    anna = Person("anna", {"Name": "Anna", "Phone_number": "1", "Email": "a@x.ch"})
+    ben = Person("ben", {"Name": "Ben", "Occupation": "Nurse"})
+    search = SearchProfile(
+        "anna_ben", [anna, ben], "anna", {"budget_total": 2400}, tmp_path
+    )
+    assert search.is_group and search.user_name == "Anna"
+    text = search.description_text()
+    assert "2 people searching together: Anna, Ben" in text
+    assert "## Ben\nName: Ben\nOccupation: Nurse" in text
+    assert search.data_dir == tmp_path / "anna_ben"
+    with pytest.raises(ProfileError, match="must be one of the members"):
+        SearchProfile("x", [anna], "ben", {"budget_total": 1}, tmp_path)
+    with pytest.raises(ProfileError, match="budget_total"):
+        SearchProfile("x", [anna], "anna", {}, tmp_path)
+
+
+WGZ_RESULTS = """
+<ul><li class="result-row"><h2><a class="result-row__link"
+ href="/wg-zimmer/zuerich/8004-zuerich-abc123.html">8004 Zürich</a></h2></li>
+<li class="result-row"><h2><a class="result-row__link"
+ href="/wg-zimmer/zuerich/8004-zuerich-abc123.html">dup</a></h2></li>
+<li><a href="/wgzimmer/search/mate.html?seite=2">2</a></li></ul>
+"""
+WGZ_LISTING = """
+<h1 class="page__title">
+<span class="page__title-text">WG-Zimmer in Zürich, CHF 800</span></h1>
+<div class="ad-page__rent">Miete pro Monat CHF 800</div>
+<dl class="ad-page__facts"><dt>Ab dem</dt><dd>1.1.2027</dd>
+<dt>Möbliert</dt><dd>Nein</dd></dl>
+<div class="ad-page__texts"><div class="ad-slot"><script>ads()</script></div>
+<div class="ad-page__text"><h2>Das Zimmer</h2><p>Hell und ruhig.</p></div></div>
+"""
+
+
+def test_wgzimmer_parsers() -> None:
+    paths = parse_results(WGZ_RESULTS)
+    assert paths == ["/wg-zimmer/zuerich/8004-zuerich-abc123.html"]
+    assert listing_id(paths[0]) == "8004-zuerich-abc123"
+    text = parse_listing(WGZ_LISTING)
+    assert text.splitlines()[:4] == [
+        "WG-Zimmer in Zürich, CHF 800",
+        "Miete pro Monat CHF 800",
+        "Ab dem: 1.1.2027",
+        "Möbliert: Nein",
+    ]
+    assert "Hell und ruhig." in text and "ads()" not in text
+    with pytest.raises(ValueError):
+        parse_listing("<html><body>nothing</body></html>")
 
 
 def test_profile_require_says_where_to_set_each_field(profile) -> None:

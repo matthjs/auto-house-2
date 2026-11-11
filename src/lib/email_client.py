@@ -12,7 +12,7 @@ from email.message import EmailMessage, Message
 from email.utils import parsedate_to_datetime
 
 from src.lib.logger import logger
-from src.personal_profile import PersonalProfile
+from src.search_profile import SearchProfile
 
 OTP_PATTERN = re.compile(r"\b\d{6}\b")
 
@@ -56,7 +56,7 @@ class EmailClient:
     Send mail through Gmail SMTP and read login codes through Gmail IMAP.
     """
 
-    def __init__(self, profile: PersonalProfile) -> None:
+    def __init__(self, profile: SearchProfile) -> None:
         """
         Create a client for one user.
 

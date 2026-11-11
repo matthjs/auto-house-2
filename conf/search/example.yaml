@@ -1,0 +1,13 @@
+# One file per search: conf/search/<name>.yaml. Personal files are git-ignored.
+# Searching alone: one member. Searching together: list everyone.
+members: [example]        # file names in conf/person/
+contact: example          # who gets contacted; their accounts in .env are used
+
+preferences:
+  budget_total: null      # maximum total rent in CHF for the whole group (required)
+  min_rooms: null         # for groups: at least one bedroom each
+  place: ""               # city for Flatfox and wohnen.ethz.ch, e.g. Zürich
+  place_wg_zimmer: ""     # region on wgzimmer.ch, e.g. zuerich (alone: rooms in shared flats)
+  move_in_date: ""
+  nice_to_haves: ""
+  deal_breakers: ""

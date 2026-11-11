@@ -1,5 +1,5 @@
 """
-Tests for the shared run loop: modes, send caps, failures and reuse of drafts.
+Tests for the shared site loop: collect, batch mode, dry run, caps and failures.
 """
 
 import json
@@ -22,7 +22,23 @@ def make_site(profile, listings, llm=None, **kw) -> FakeSite:
     return FakeSite(profile, agent, listings=listings, **kw)
 
 
-def test_dry_run_never_sends(profile) -> None:
+def test_collect_saves_found_listings_and_contacts_nobody(profile) -> None:
+    site = make_site(profile, [listing("a"), listing("b")])
+    found = site.collect()
+    assert [item["id"] for item in found] == ["a", "b"]
+    assert found[0]["text"] == "Room, 800 CHF"
+    assert site.tracker.get("a")["status"] == "found"
+    assert site.sent == [] and site.closed
+
+
+def test_collect_twice_keeps_one_history_entry(profile) -> None:
+    make_site(profile, [listing("a")]).collect()
+    site = make_site(profile, [listing("a")])
+    site.collect()
+    assert len(site.tracker.get("a")["history"]) == 1
+
+
+def test_batch_dry_run_never_sends(profile) -> None:
     site = make_site(profile, [listing("a"), listing("b")])
     summary = site.run()
     assert site.sent == []
@@ -31,24 +47,31 @@ def test_dry_run_never_sends(profile) -> None:
     assert site.closed
 
 
-def test_auto_sends_at_most_max_sends(profile) -> None:
-    site = make_site(
-        profile, [listing(str(i)) for i in range(5)], mode="auto", max_sends=2
-    )
+def test_batch_sends_at_most_max_sends(profile) -> None:
+    listings = [listing(str(i)) for i in range(5)]
+    site = make_site(profile, listings, dry_run=False, max_sends=2)
     summary = site.run()
     assert len(site.sent) == 2 and summary["sent"] == 2
 
 
-def test_auto_does_not_send_drafts_that_fail_review(profile) -> None:
+def test_draft_only_site_never_sends(profile) -> None:
+    site = make_site(profile, [listing("a")], dry_run=False)
+    site.can_send = False
+    site.run()
+    assert site.sent == []
+    assert site.tracker.get("a")["status"] == "drafted"
+
+
+def test_batch_does_not_send_drafts_that_fail_review(profile) -> None:
     llm = scripted(reviews=[Review(passed=False, issues=["Invented a job."])] * 4)
-    site = make_site(profile, [listing("a")], llm=llm, mode="auto")
+    site = make_site(profile, [listing("a")], llm=llm, dry_run=False)
     site.run()
     assert site.sent == []
     assert site.tracker.get("a")["status"] == "needs_review"
 
 
 def test_failed_send_is_not_marked_contacted(profile) -> None:
-    site = make_site(profile, [listing("a")], mode="auto", fail_send=True)
+    site = make_site(profile, [listing("a")], dry_run=False, fail_send=True)
     site.run()
     record = site.tracker.get("a")
     assert record["status"] == "failed" and "site down" in record["error"]
@@ -79,38 +102,12 @@ def test_missing_contact_email_skips_without_llm(profile) -> None:
     assert site.tracker.get("a")["status"] == "skipped"
 
 
-def test_confirm_mode_sends_the_edited_draft(profile) -> None:
-    def ask(_question: str) -> str:
-        path = site.tracker.directory / "_review.json"
-        content = json.loads(path.read_text())
-        content["response"] = "Edited by me."
-        path.write_text(json.dumps(content))
-        return "s"
-
-    site = make_site(profile, [listing("a")], mode="confirm", ask=ask)
-    site.run()
-    assert site.sent == [("a", "Room", "Edited by me.")]
-    assert not (site.tracker.directory / "_review.json").exists()
-
-
-def test_confirm_quit_stops_and_keeps_the_draft(profile) -> None:
-    site = make_site(
-        profile, [listing("a"), listing("b")], mode="confirm", ask=lambda _: "q"
-    )
-    summary = site.run()
-    assert summary["drafted"] == 1 and site.sent == []
-    assert site.tracker.get("b") is None
-    assert site.closed
-
-
 def test_saved_draft_is_reused_without_llm_calls(profile) -> None:
     make_site(profile, [listing("a")]).run()
     llm = scripted()
-    site = make_site(profile, [listing("a")], llm=llm, mode="auto")
+    site = make_site(profile, [listing("a")], llm=llm, dry_run=False)
     site.run()
     assert llm.calls == []
     assert site.sent and site.tracker.get("a")["status"] == "sent"
-    assert [h["status"] for h in site.tracker.get("a")["history"]] == [
-        "drafted",
-        "sent",
-    ]
+    history = [h["status"] for h in site.tracker.get("a")["history"]]
+    assert history == ["drafted", "sent"]

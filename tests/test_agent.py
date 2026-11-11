@@ -69,4 +69,4 @@ def test_listing_is_wrapped_and_profile_is_included(profile) -> None:
     ApplicationAgent(profile, llm).process("<p>Room in Zurich</p>")
     evaluate_prompt = llm.calls[0][1]
     assert "<listing>\nRoom in Zurich\n</listing>" in evaluate_prompt
-    assert "budget_upper_bound: 920" in evaluate_prompt
+    assert "budget_total: 920" in evaluate_prompt

@@ -22,21 +22,25 @@ class WohnenETHZRunner(SiteRunner):
 
     def required_fields(self) -> tuple[str, ...]:
         """
-        Profile fields this site needs in the current mode.
+        Profile fields needed to search.
 
-        :return: Site login and place, plus Gmail credentials unless dry run.
+        :return: wohnen.ethz.ch login and the place.
         """
-        fields = ("wohnen_ethz_login", "wohnen_ethz_password", "place")
-        if self.mode != "dry-run":
-            fields += ("gmail_login", "gmail_password")
-        return fields
+        return ("wohnen_ethz_login", "wohnen_ethz_password", "place")
+
+    def send_fields(self) -> tuple[str, ...]:
+        """
+        Profile fields needed to send a message.
+
+        :return: The fields used when contacting a landlord.
+        """
+        return ("gmail_login", "gmail_password")
 
     def start(self) -> None:
         """
         Open the browser, log in and run the search.
         """
         self.interactor: WohnenETHZWebInteractor | None = None
-        self.email_client = EmailClient(self.profile)
         self.interactor = WohnenETHZWebInteractor(self.profile)
         self.interactor.load()
         self.interactor.enter()
@@ -68,7 +72,9 @@ class WohnenETHZRunner(SiteRunner):
         :raises EmailError: If sending fails.
         """
         assert listing.contact_email
-        self.email_client.gmail_send_message(listing.contact_email, subject, message)
+        EmailClient(self.profile).gmail_send_message(
+            listing.contact_email, subject, message
+        )
 
     def close(self) -> None:
         """

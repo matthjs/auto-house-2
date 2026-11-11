@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-STATUSES = ("skipped", "drafted", "needs_review", "failed", "rejected", "sent")
+STATUSES = ("found", "skipped", "drafted", "needs_review", "failed", "rejected", "sent")
 # Listings with these statuses are never processed again.
 FINAL_STATUSES = frozenset({"skipped", "rejected", "sent"})
 LEGACY_STATUS = "sent"

@@ -13,7 +13,7 @@
       "Bash(uv run python main.py:*)",
       "Bash(python main.py:*)",
       "Bash(make me-have-a-house:*)",
-      "Bash(make dry-run:*)",
+      "Bash(make search:*)",
       "Bash(uv run pytest -m live:*)"
     ],
     "deny": [

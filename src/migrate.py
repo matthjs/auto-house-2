@@ -1,7 +1,8 @@
 """
-One-time migration from the old ``secret/<name>/`` layout to ``conf/`` + ``data/``.
+One-time migration from the old ``secret/<name>/`` layout to a one-person search in
+``conf/person/``, ``conf/search/`` and ``data/``.
 
-Usage: ``uv run python -m src.migrate <name>`` (or ``make migrate PROFILE=<name>``).
+Usage: ``uv run python -m src.migrate <name>`` (or ``make migrate SEARCH=<name>``).
 """
 
 import argparse
@@ -12,7 +13,7 @@ from pathlib import Path
 
 from omegaconf import OmegaConf
 
-from src.personal_profile import CREDENTIAL_ENV, DATA_DIR, PROFILE_DIR
+from src.search_profile import CREDENTIAL_ENV, DATA_DIR, PERSON_DIR, SEARCH_DIR
 
 # Old site_credentials.json field -> environment variable that replaces it.
 OLD_CREDENTIAL_FIELDS: dict[str, str] = {
@@ -39,31 +40,35 @@ class MigrationError(RuntimeError):
 def migrate(
     name: str,
     secret_dir: Path = Path("secret"),
-    profile_dir: Path = PROFILE_DIR,
+    person_dir: Path = PERSON_DIR,
+    search_dir: Path = SEARCH_DIR,
     data_dir: Path = DATA_DIR,
 ) -> list[str]:
     """
-    Copy an old profile and its listing records into the new layout.
+    Turn an old profile into a person, a one-person search and its listing records.
 
-    Writes ``<profile_dir>/<name>.yaml`` from the two JSON files and copies
-    ``<secret_dir>/<name>/data/`` to ``<data_dir>/<name>/``. Nothing is deleted and
-    nothing is overwritten; credentials are not read or copied.
+    Writes ``<person_dir>/<name>.yaml`` and ``<search_dir>/<name>.yaml`` from the two
+    JSON files and copies ``<secret_dir>/<name>/data/`` to ``<data_dir>/<name>/``.
+    Nothing is deleted and nothing is overwritten; credentials are not read or copied.
 
     :param name: Profile folder name under ``secret_dir``.
     :param secret_dir: Old root folder.
-    :param profile_dir: Folder for the new profile config.
+    :param person_dir: Folder for person files.
+    :param search_dir: Folder for search files.
     :param data_dir: Root folder for the new listing records.
     :return: Lines describing what was done and what is left to do by hand.
     :raises MigrationError: If the source is missing or a target already exists.
     """
     source = Path(secret_dir) / name
-    profile_target = Path(profile_dir) / f"{name}.yaml"
+    person_target = Path(person_dir) / f"{name}.yaml"
+    search_target = Path(search_dir) / f"{name}.yaml"
     data_source = source / "data"
     data_target = Path(data_dir) / name
     if not source.is_dir():
         raise MigrationError(f"{source} does not exist")
-    if profile_target.exists():
-        raise MigrationError(f"{profile_target} already exists; not overwriting it")
+    for target in (person_target, search_target):
+        if target.exists():
+            raise MigrationError(f"{target} already exists; not overwriting it")
     if data_source.is_dir() and data_target.exists():
         raise MigrationError(f"{data_target} already exists; not overwriting it")
 
@@ -77,9 +82,16 @@ def migrate(
             raise MigrationError(f"{path} does not exist")
         sections[key] = json.loads(path.read_text(encoding="utf-8"))
 
-    profile_target.parent.mkdir(parents=True, exist_ok=True)
-    OmegaConf.save(OmegaConf.create(sections), profile_target)
-    report = [f"Wrote {profile_target}"]
+    preferences = dict(sections["preferences"])
+    preferences["budget_total"] = preferences.pop("budget_upper_bound", None)
+    search = {"members": [name], "contact": name, "preferences": preferences}
+    for target, content in (
+        (person_target, {"description": sections["description"]}),
+        (search_target, search),
+    ):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        OmegaConf.save(OmegaConf.create(content), target)
+    report = [f"Wrote {person_target} and {search_target}"]
 
     if data_source.is_dir():
         shutil.copytree(data_source, data_target)
@@ -100,7 +112,7 @@ def migrate(
             + "\n".join(moves)
         )
     report.append(
-        f"Check `uv run python main.py profile={name} command=status`, then delete "
+        f"Check `uv run python main.py search={name} command=status`, then delete "
         f"{source}/."
     )
     return report

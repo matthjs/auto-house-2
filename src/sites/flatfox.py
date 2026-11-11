@@ -24,20 +24,25 @@ class FlatfoxRunner(SiteRunner):
 
     def required_fields(self) -> tuple[str, ...]:
         """
-        Profile fields this site needs in the current mode.
+        Profile fields needed to search.
 
-        :return: Login, code inbox and place, plus contact details unless dry run.
+        :return: Flatfox login, the inbox for login codes, and the place.
         """
-        fields = (
+        return (
             "flatfox_login",
             "flatfox_password",
             "gmail_login2",
             "gmail_password2",
             "place",
         )
-        if self.mode != "dry-run":
-            fields += ("user_name", "user_phone_number")
-        return fields
+
+    def send_fields(self) -> tuple[str, ...]:
+        """
+        Profile fields needed to send a message.
+
+        :return: The fields used when contacting a landlord.
+        """
+        return ("user_name", "user_phone_number")
 
     def start(self) -> None:
         """

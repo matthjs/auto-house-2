@@ -12,7 +12,7 @@ from selenium.webdriver.common.keys import Keys
 
 from src.lib.email_client import EmailClient
 from src.lib.errors import SendError
-from src.personal_profile import PersonalProfile
+from src.search_profile import SearchProfile
 
 TIME_DELAY_ON_LOAD = 0.5
 
@@ -23,7 +23,7 @@ class FlatfoxWebInteractor:
     send contact requests.
     """
 
-    def __init__(self, profile: PersonalProfile, email_client: EmailClient) -> None:
+    def __init__(self, profile: SearchProfile, email_client: EmailClient) -> None:
         """
         Start a Chrome session.
 

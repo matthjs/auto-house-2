@@ -2,20 +2,24 @@
 
 Do you like to spend time looking for housing? No, neither do I!
 
-Well, what about getting your own housing agent! An LLM can be that for you: it crawls the housing sites, decides which offers actually fit you, and writes a personal message to each landlord.
+Well, what about getting your own housing agent! An agent can be that for you: it crawls the housing sites, decides which offers actually fit you, and writes a personal message to each landlord.
 
 > **Note:** this is a fork of [auto-house](https://github.com/MichalTesnar/auto-house) by [Michal Tesnar](https://github.com/MichalTesnar), who wrote the original scrapers and idea, with contributions from Ryan Slocum. This fork adds the agent loop (fit check, self-review), more LLM providers, a CLI and tests. If `auto-house` has helped you, consider starring the original repository as well.
 
 # How it works
 
-For every new listing on a site, the agent:
+You talk to a coding agent (Claude Code or Codex) and it does the searching with you:
 
-1. **Checks the fit.** It scores the listing from 0 to 100 against your budget, place, deal breakers and description, and flags anything that looks like a scam. Listings below the threshold are skipped and never looked at again.
-2. **Drafts a message.** It first works out who will read it (a flatshare, a private landlord, an agency) and what they ask for. Then it writes a short message in the listing's language, using only facts from your description.
-3. **Reviews the draft.** Fixed rules catch placeholders and bad length, and the LLM checks language, facts and tone. A failing draft is rewritten once with the feedback.
-4. **Sends, if you allow it.** By default nothing is sent. See [Modes](#modes).
+1. **Search.** It runs the tool, which finds new listings on the housing sites. This contacts nobody.
+2. **Judge.** It scores each listing against your budget, place and deal breakers, flags anything that looks like a scam, and shows you a ranked table.
+3. **Draft.** For the ones you pick, it writes a short message in the listing's language, using only facts about you (and your flatmates, if you search together), and checks it against a review list.
+4. **You send.** You approve or tweak each message. For website forms you paste it in yourself (the sites have bot checks); for wohnen.ethz.ch it can email the landlord after your OK. Then it records the listing as sent.
 
-Every listing gets a record in `data/<you>/<site>/` with its status (`skipped`, `drafted`, `needs_review`, `failed`, `rejected`, `sent`), the URL, the fit score, the draft and timestamps. A listing is never contacted twice, and it only counts as `sent` once the site or mail server accepted the message.
+Every listing gets a record in `data/<search>/<site>/` with its status (`found`, `skipped`, `drafted`, `needs_review`, `failed`, `rejected`, `sent`), the URL, the text, the fit and the message. A listing is never contacted twice, even if several people share a search.
+
+There's also a **batch mode** without the chat: `make me-have-a-house SITE=wgzimmer` lets an API model (DeepSeek, Claude or OpenAI) judge and draft every new listing in one cheap run, for example as a daily job. You review the drafts later.
+
+**Dry run is on by default.** Nothing is sent, and no listing is marked as sent or rejected, unless the command gets `dry_run=false`. The agent only adds that after your OK for that one listing. (Searching and drafting still save their results in `data/`, so nothing is lost or paid for twice.)
 
 # Principles of usage
 
@@ -25,101 +29,66 @@ Please use this moderately, and never try to get around a site's bot checks.
 
 # Integrated websites
 
-| Site | `site=` | How landlords are contacted | Status (November 2026) |
-|---|---|---|---|
-| [Zimmer- und Wohnungsvermittlung Universität/ETH Zürich](https://www.wohnen.ethz.ch/) | `wohnen_ethz` | Email from your Gmail | Site shows "Service not available" |
-| [WGZimmer.ch](https://www.wgzimmer.ch/home.html) | `wgzimmer` | Contact form on the site | Site was redesigned; scraper needs an update. Its contact form now has a bot check, so sending can't be automated |
-| [Flatfox.ch](https://flatfox.ch/c/en/) | `flatfox` | Contact form on the site | Not verified against the current site |
+| Site | `site=` | Login needed | How landlords are contacted | Status (November 2026) |
+|---|---|---|---|---|
+| [WGZimmer.ch](https://www.wgzimmer.ch/home.html) | `wgzimmer` | No | You paste the message into the site's form | Works (plain HTTP, no browser) |
+| [Flatfox.ch](https://flatfox.ch/c/en/) | `flatfox` | Yes | Site form | Not verified against the current site |
+| [Zimmer- und Wohnungsvermittlung Universität/ETH Zürich](https://www.wohnen.ethz.ch/) | `wohnen_ethz` | Yes | Email from your Gmail, after your OK | Site shows "Service not available" |
+
+wgzimmer.ch lists single rooms in shared flats, so it suits people searching alone. Groups are better off on Flatfox.
 
 # Setup
 
-Three things, each in its own place. All three are git-ignored, except the examples.
+1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) (and Google Chrome for Flatfox and wohnen.ethz.ch).
+2. `uv sync`, then `cp .env.example .env`
+3. Open [Claude Code](https://claude.com/claude-code) or [Codex](https://developers.openai.com/codex) in this folder and run **`/setup`** (Claude Code) or say **"set up auto-house"** (Codex). It checks the install, asks whether you search alone or together, your budget and what you're looking for, writes the config files, and explains the optional API key for batch mode.
+4. Fill in `.env` with what it tells you. For wgzimmer.ch in chat mode that's nothing at all; every variable is explained in [.env.example](.env.example).
 
-| What | Where |
-|---|---|
-| Who you are and what you're looking for | `conf/profile/<you>.yaml` |
-| Passwords and API keys | `.env` |
-| What the agent did per listing | `data/<you>/` (written by the tool) |
+Then say **"find me housing on wgzimmer"** (the `find-housing` skill).
 
-## Install
+**Without a coding agent:** `make new-search SEARCH=<you>` copies the example files to `conf/person/<you>.yaml` and `conf/search/<you>.yaml`; fill them in by hand, add an API key to `.env`, and use batch mode.
 
-1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Google Chrome.
-2. `uv sync` (installs Python 3.10+ and all dependencies into `.venv/`).
+## Where things live
 
-## Your profile
+| What | Where | In git? |
+|---|---|---|
+| Who each person is | `conf/person/<name>.yaml` | No |
+| What a search is looking for, and who is in it | `conf/search/<name>.yaml` | No |
+| Passwords and API keys | `.env` | No |
+| What happened to each listing | `data/<search>/` | No |
+| Settings and their defaults | [conf/config.yaml](conf/config.yaml) | Yes |
 
-1. `make new-profile PROFILE=<you>` copies [conf/profile/example.yaml](conf/profile/example.yaml) to `conf/profile/<you>.yaml`, and creates `.env` from [.env.example](.env.example) if you don't have one yet.
-2. Fill in `conf/profile/<you>.yaml`:
-   - `description`: who you are. The agent only uses facts from here, so the more you put in, the better the messages.
-   - `preferences.budget_upper_bound`: maximum rent in CHF (required).
-   - `preferences.place`: city for Flatfox and wohnen.ethz.ch, for example `Zürich`.
-   - `preferences.place_wg_zimmer`: the region value from wgzimmer.ch's search form.
-   - `preferences.move_in_date`, `nice_to_haves`, `deal_breakers`: optional, used by the fit check.
-3. Fill in `.env` for what you use (every variable is listed there, with comments):
-   - `DEEPSEEK_API_KEY` (or the key of another provider, see below).
-   - `WOHNEN_ETHZ_LOGIN` / `WOHNEN_ETHZ_PASSWORD`: your wohnen.ethz.ch account.
-   - `FLATFOX_LOGIN` / `FLATFOX_PASSWORD`: your Flatfox account.
-   - `GMAIL_ADDRESS` / `GMAIL_APP_PASSWORD`: the Gmail account that emails landlords (wohnen.ethz.ch). Use a Gmail [app password](https://support.google.com/mail/answer/185833?hl=en), not your normal one.
-   - `CODE_INBOX_ADDRESS` / `CODE_INBOX_APP_PASSWORD`: the Gmail inbox that receives Flatfox's login codes (can be the same account).
-   - `AUTO_HOUSE_PROFILE` / `AUTO_HOUSE_LLM`: optional defaults, so you can leave out `profile=` and `llm=`.
+Only the `example.yaml` files are tracked. Searching together: one `conf/person/` file per person, and one search that lists them as `members` with one `contact`. The contact's accounts are used and landlords reply to them.
 
-Variables already set in your shell take priority over `.env`.
+**Coming from the original auto-house (`secret/<you>/`)?** Run `make migrate SEARCH=<you>`. It turns your two JSON files into a person file and a one-person search, and copies your listing records to `data/<you>/` so nobody gets contacted twice. It deletes and overwrites nothing, and it doesn't touch passwords: it lists which `site_credentials.json` field goes into which `.env` variable. Once `make status SEARCH=<you>` looks right, delete `secret/<you>/`.
 
-**Coming from the original auto-house (`secret/<you>/`)?** Run `make migrate PROFILE=<you>`. It writes `conf/profile/<you>.yaml` from your two JSON files and copies your listing records to `data/<you>/`, so nobody gets contacted twice. It deletes and overwrites nothing. It does not copy passwords: it lists which `site_credentials.json` field goes into which `.env` variable, so you can move them by hand. Once `make status` looks right, delete `secret/<you>/`.
+# Using the tool directly
 
-## LLM provider
+The agent calls these commands, but you can too. Configuration is [Hydra](https://hydra.cc/), so any setting can be changed on the command line.
+
+```bash
+uv run python main.py search=<name> site=wgzimmer command=search    # new listings as JSON
+uv run python main.py search=<name> command=status                  # every listing so far
+uv run python main.py search=<name> site=wgzimmer command=show listing=<id>
+uv run python main.py search=<name> site=wgzimmer command=mark listing=<id> decision=sent message_file=msg.md dry_run=false
+uv run python main.py search=<name> site=wohnen_ethz command=send listing=<id> message_file=msg.md   # shows the email; add dry_run=false to send
+uv run python main.py search=<name> site=wgzimmer command=run       # batch mode (drafts only)
+uv run python main.py search=<name> site=wgzimmer --cfg job         # print the final config
+```
+
+A message file has an optional `Subject: ...` first line, then the message. Set `AUTO_HOUSE_SEARCH` in `.env` to leave out `search=`. Make shortcuts: `make search`, `make status`, `make me-have-a-house` (all take `SEARCH=` and `SITE=`).
+
+## Batch mode and API models
 
 | `llm=` | Default model | API key in `.env` |
 |---|---|---|
-| `deepseek` (default) | `deepseek-flash` | `DEEPSEEK_API_KEY` ([get one](https://platform.deepseek.com/)) |
-| `openai` | `gpt-6-luna` | `OPENAI_API_KEY` |
+| `deepseek` | `deepseek-flash` | `DEEPSEEK_API_KEY` ([get one](https://platform.deepseek.com/)) |
 | `claude` | `claude-opus-5-5` | `ANTHROPIC_API_KEY` |
+| `openai` | `gpt-6-luna` | `OPENAI_API_KEY` |
 
-Pick another model with `llm.model=...`, for example `llm=deepseek llm.model=deepseek-v4-pro`.
+Without `llm=`, the first provider whose key is set is used (in the order above). Pick another model with `llm.model=...`. Check a key with one small paid call: `uv run python main.py search=<name> command=check-llm`.
 
-Check that your key works (one small, paid call):
-
-```bash
-uv run python main.py profile=<you> command=check-llm
-```
-
-Gemini is no longer supported: the model this project used (`gemini-2.0-flash`) was shut down in June 2026.
-
-# Ready to go!
-
-```bash
-# See what the agent would send. Nothing is sent.
-make dry-run PROFILE=<you> SITE=flatfox
-
-# Review each draft, edit it if you like, and choose send / reject / later / quit.
-make me-have-a-house PROFILE=<you> SITE=flatfox
-
-# What happened to every listing so far.
-make status PROFILE=<you>
-```
-
-Configuration uses [Hydra](https://hydra.cc/), so any setting can be changed on the command line:
-
-```bash
-uv run python main.py profile=<you> site=flatfox llm=claude mode=confirm min_fit=70
-uv run python main.py profile=<you> site=flatfox --cfg job     # print the final config, run nothing
-```
-
-All settings and their defaults are in [conf/config.yaml](conf/config.yaml).
-
-## Modes
-
-| `mode=` | What it does |
-|---|---|
-| `dry-run` (default) | Checks fit and drafts messages. Nothing is sent. Drafts are saved, so a later `confirm` run reuses them without paying for them again. |
-| `confirm` | Shows the fit score, red flags and review result for each draft and saves it as `data/<you>/<site>/_review.json` for editing. Sends only when you answer `s`. |
-| `auto` | Sends drafts that passed review without asking, at most `max_sends` (default 5) per run. Use with care. |
-
-Other settings: `min_fit` (default 60) is the lowest fit score to apply at.
-
-## Tuning the agent
-
-The instructions for each step are plain text in [prompts/](prompts/): `evaluate.md` (fit rubric), `draft.md` (how to write the message) and `review.md` (the checklist). Edit them to change the agent's behaviour; no code changes needed.
+Batch mode uses the instructions in [prompts/](prompts/): `evaluate.md` (fit rubric), `draft.md` (how to write) and `review.md` (the checklist). The `find-housing` skill uses the same files, so editing them changes both.
 
 # Development
 
@@ -129,10 +98,6 @@ make format    # ruff format + autofix lint
 make check     # what CI runs
 ```
 
-Coding agents (Claude Code, Codex, ...) should read [AGENTS.md](AGENTS.md) first. In Claude Code, `/add-site <url>` walks through adding a new website.
+Coding agents should read [AGENTS.md](AGENTS.md) first. The skills live in [.agents/skills/](.agents/skills/) (read by Codex; `.claude/skills` links there for Claude Code). The `add-site` skill walks through adding a new website.
 
-Please open an issue if anything comes up, or make a pull request if you want to add a feature. See the [to-do list](TODO.md) for planned features.
-
-# Tricks
-
-- wgzimmer.ch runs through [undetected-chromedriver](https://github.com/ultrafunkamsterdam/undetected-chromedriver). If it can't match your Chrome version, set `CHROME_VERSION_MAIN` to Chrome's major version (for example `CHROME_VERSION_MAIN=142`).
+Please open an issue if anything comes up, or make a pull request if you want to add a feature.

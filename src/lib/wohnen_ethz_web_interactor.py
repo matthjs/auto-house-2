@@ -10,7 +10,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 
-from src.personal_profile import PersonalProfile
+from src.search_profile import SearchProfile
 
 TIME_DELAY_ON_LOAD = 0.5
 MAILTO = "mailto:"
@@ -41,7 +41,7 @@ class WohnenETHZWebInteractor:
     Contact happens by email, so this class has no send step.
     """
 
-    def __init__(self, profile: PersonalProfile, headless: bool = False) -> None:
+    def __init__(self, profile: SearchProfile, headless: bool = False) -> None:
         """
         Start a Chrome session.
 
