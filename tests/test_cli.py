@@ -10,7 +10,8 @@ from hydra import compose, initialize_config_dir
 from omegaconf import DictConfig
 
 import main
-from src.cli import build_profile, run_command
+from src.cli import build_profile, build_runner, run_command
+from src.lib.commute import CommuteClient, Place
 from src.llm import DEFAULT_MODELS
 from src.migrate import MigrationError, migrate
 from src.sites import SITES
@@ -154,11 +155,12 @@ def test_env_defaults_and_llm_auto_pick(monkeypatch) -> None:
     monkeypatch.setenv("AUTO_HOUSE_SEARCH", "anna_ben")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
     assert main.apply_env_defaults(["site=flatfox"]) == [
-        "site=flatfox",
         "search=anna_ben",
         "llm=claude",
+        "site=flatfox",
     ]
-    assert main.apply_env_defaults(["llm=openai"]) == ["llm=openai", "search=anna_ben"]
+    assert main.apply_env_defaults(["llm=openai"]) == ["search=anna_ben", "llm=openai"]
+    assert main.apply_env_defaults(["--cfg", "job"])[-2:] == ["--cfg", "job"]
     monkeypatch.setenv("AUTO_HOUSE_LLM", "deepseek")
     assert main.apply_env_defaults([])[-1] == "llm=deepseek"
 
@@ -190,3 +192,19 @@ def test_migrate_makes_one_person_search(tmp_path) -> None:
     assert search.preferences.budget_total == "900"
     with pytest.raises(MigrationError, match="already exists"):
         migrate("me", **dirs)
+
+
+def test_places_from_config_turn_on_commute(workspace) -> None:
+    place = "{name:ETH,address:'Rämistrasse 101, 8092 Zürich',who:[ben]}"
+    cfg = load_config(workspace, f"search.places=[{place}]", "site=flatfox")
+    profile = build_profile(cfg)
+    assert profile.places == [
+        Place(name="ETH", address="Rämistrasse 101, 8092 Zürich", who=["ben"])
+    ]
+    assert isinstance(build_runner(cfg, profile).commute, CommuteClient)
+    off = load_config(
+        workspace, f"search.places=[{place}]", "site=flatfox", "commute.enabled=false"
+    )
+    assert build_runner(off, build_profile(off)).commute is None
+    no_places = load_config(workspace, "site=flatfox")
+    assert build_runner(no_places, build_profile(no_places)).commute is None
