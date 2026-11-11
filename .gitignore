@@ -2,7 +2,8 @@ secret/*
 !secret/example/
 logs/*
 out/*
-__pycache__
-TODO.md
+__pycache__/
+.venv/
 venv/
-uv.lock
+.pytest_cache/
+.ruff_cache/
