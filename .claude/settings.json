@@ -3,17 +3,11 @@
     "allow": [
       "Bash(uv run pytest:*)",
       "Bash(uv run ruff:*)",
-      "Bash(uv sync:*)",
-      "Bash(make test)",
-      "Bash(make lint)",
-      "Bash(make format)",
-      "Bash(make check)"
+      "Bash(uv sync:*)"
     ],
     "ask": [
       "Bash(uv run python main.py:*)",
       "Bash(python main.py:*)",
-      "Bash(make me-have-a-house:*)",
-      "Bash(make search:*)",
       "Bash(uv run pytest -m live:*)"
     ],
     "deny": [

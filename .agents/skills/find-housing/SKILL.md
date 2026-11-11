@@ -17,7 +17,7 @@ You run the search for the user and do the judging and writing yourself. The use
 ## Step 0: Which search and site
 
 - The search is `AUTO_HOUSE_SEARCH` from the user's setup, or ask: "Which search? (files in `conf/search/`)". If there is none, use the setup skill first.
-- Sites: `wgzimmer` (no login needed), `flatfox` (needs Flatfox login), `wohnen_ethz` (needs login; contacted by email). Ask which ones if the user didn't say.
+- Sites: `wgzimmer` and `woko` (single rooms), `flatfox` (flats and rooms), `email_alerts` (Homegate, ImmoScout24, Comparis alerts in the contact's Gmail), `wohnen_ethz` (login; contacted by email). Ask which ones if the user didn't say; for a group suggest `flatfox` and `email_alerts`.
 - Read `conf/search/<search>.yaml` and the `conf/person/<name>.yaml` of every member. These are the only facts you may use about the applicants.
 
 ## Step 1: Search
@@ -63,7 +63,7 @@ Subject: <subject>
 
 Show each draft with its link. The user approves, edits ("make it warmer") or rejects.
 
-- **Website forms (`wgzimmer`, `flatfox`):** give the user the link and the final message to paste. Sending is theirs. When they say it's sent:
+- **On the website (`wgzimmer`, `flatfox`, `woko`, `email_alerts`):** give the user the link and the final message to paste (for WOKO, the apply link from the listing text). Sending is theirs. When they say it's sent:
 
   ```bash
   uv run python main.py search=<search> site=<site> command=mark listing=<id> decision=sent message_file=data/<search>/drafts/<site>-<id>.md dry_run=false

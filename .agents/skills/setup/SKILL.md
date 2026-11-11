@@ -13,7 +13,7 @@ yourself so nobody edits YAML. Read AGENTS.md first. Never read or write `.env`.
 Look at `conf/search/` (ignore `example.yaml`) and check whether a `secret/` folder exists. Then greet the user in one short message and offer what applies:
 
 - **New search** (no searches yet): "I'll ask who's searching, your budget and what you're looking for. Takes about five minutes."
-- **Import**: "Paste a CV, LinkedIn summary or a short bio for each person and I'll fill in what I can." If `secret/<name>/` exists (the original auto-house), offer `make migrate SEARCH=<name>` instead.
+- **Import**: "Paste a CV, LinkedIn summary or a short bio for each person and I'll fill in what I can." If `secret/<name>/` exists (the original auto-house), offer `uv run python -m src.migrate <name>` instead.
 - **Change an existing search**: budget, place, preferences, adding or removing a person, changing the contact. Read the files, change only what was asked, show the change, and skip to Step 6.
 
 ## Step 1: Install check
@@ -43,10 +43,10 @@ Write `conf/person/<name>.yaml` in the shape of `conf/person/example.yaml`. Use 
 Ask:
 
 - **Budget:** maximum total rent in CHF for everyone together (required).
-- **Place:** city for Flatfox and wohnen.ethz.ch (e.g. `Zürich`) and the wgzimmer.ch region (e.g. `zuerich`, `kanton-zuerich`).
+- **Place:** city for wohnen.ethz.ch (e.g. `Zürich`) and the wgzimmer.ch region (e.g. `zuerich`, `kanton-zuerich`). Flatfox searches the city of Zurich by default; for another area, change `bbox` in `conf/site/flatfox.yaml`.
 - **Rooms** (groups): minimum number of rooms; default one bedroom each.
 - Move-in date, nice-to-haves, deal breakers.
-- **Sites:** `wgzimmer` (no login, single rooms in shared flats: suits someone alone), `flatfox` (login; flats, better for groups), `wohnen_ethz` (login; ETH/UZH housing office, contact by email).
+- **Sites:** `wgzimmer` (single rooms in shared flats; suits someone alone), `woko` (student rooms; students only), `flatfox` (flats and rooms; good for groups), `email_alerts` (Homegate, ImmoScout24 and Comparis through their alert emails; they set up the alerts on each portal, sent to the contact's Gmail), `wohnen_ethz` (login; ETH/UZH housing office, contact by email). None of these needs a site login except wohnen.ethz.ch.
 
 Write `conf/search/<search>.yaml` in the shape of `conf/search/example.yaml`, with `members` and `contact` set.
 
@@ -55,7 +55,7 @@ Write `conf/search/<search>.yaml` in the shape of `conf/search/example.yaml`, wi
 Explain the two ways of working, then ask which they want:
 
 - **Chat mode (default):** you (Claude Code or Codex) judge listings and write messages together with the user. **No API key needed.**
-- **Batch mode (optional):** `make me-have-a-house` lets an API model judge and draft every new listing in one go, for example as a daily job, without a chat. Needs one API key:
+- **Batch mode (optional):** `uv run python main.py site=<site> command=run` lets an API model judge and draft every new listing in one go, for example as a daily job, without a chat. Needs one API key:
   - DeepSeek (cheapest; recommended): `DEEPSEEK_API_KEY`, from https://platform.deepseek.com/
   - Claude: `ANTHROPIC_API_KEY`, from https://console.anthropic.com/
   - OpenAI: `OPENAI_API_KEY`, from https://platform.openai.com/
@@ -63,9 +63,9 @@ Explain the two ways of working, then ask which they want:
 
 Then tell the user exactly which lines to fill in `.env` themselves, based on their sites and choice:
 
-- wgzimmer.ch only and chat mode: nothing.
-- Flatfox: `FLATFOX_LOGIN`, `FLATFOX_PASSWORD`, `CODE_INBOX_ADDRESS`, `CODE_INBOX_APP_PASSWORD` (Gmail [app password](https://support.google.com/mail/answer/185833)).
-- wohnen.ethz.ch: `WOHNEN_ETHZ_LOGIN`, `WOHNEN_ETHZ_PASSWORD`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`.
+- wgzimmer.ch, Flatfox, WOKO in chat mode: nothing.
+- Email alerts: `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD` (a Gmail [app password](https://support.google.com/mail/answer/185833)). Also explain how to set up the alerts on each portal: save a search with their place, budget and rooms, and turn on email alerts to that Gmail address.
+- wohnen.ethz.ch: `WOHNEN_ETHZ_LOGIN`, `WOHNEN_ETHZ_PASSWORD`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, and Google Chrome installed.
 - Batch mode: the one API key from above.
 - Recommended: `AUTO_HOUSE_SEARCH=<search>`, so commands don't need `search=`.
 

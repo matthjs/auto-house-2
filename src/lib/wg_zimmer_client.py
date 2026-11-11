@@ -7,7 +7,8 @@ landlord is behind a bot check (Cloudflare Turnstile) and is left to the user.
 
 import re
 import time
-from urllib.parse import urljoin
+from collections.abc import Callable
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -120,13 +121,23 @@ class WGZimmerClient:
         response.raise_for_status()
         return response.text
 
-    def search(self, region: str, max_rent: int, max_pages: int) -> list[str]:
+    def search(
+        self,
+        region: str,
+        max_rent: int,
+        max_pages: int,
+        is_known: Callable[[str], bool] = lambda _id: False,
+    ) -> list[str]:
         """
         Collect listing URLs for a region and maximum rent.
+
+        Stops early at a results page that has no listing ``is_known`` says is new,
+        so a repeated search usually costs one request.
 
         :param region: Region value from the search form, for example ``zuerich``.
         :param max_rent: Maximum rent in CHF.
         :param max_pages: Most result pages to read (24 listings per page).
+        :param is_known: Returns ``True`` for listing ids already handled.
         :return: Absolute listing URLs, newest first as the site sorts them.
         """
         urls: list[str] = []
@@ -135,12 +146,11 @@ class WGZimmerClient:
             if page > 1:
                 params["seite"] = str(page)
             paths = parse_results(self._get(BASE_URL + SEARCH_PATH, params))
-            new = [
-                urljoin(BASE_URL, p) for p in paths if urljoin(BASE_URL, p) not in urls
-            ]
-            if not new:
-                break
+            page_urls = [urljoin(BASE_URL, p) for p in paths]
+            new = [u for u in page_urls if u not in urls]
             urls.extend(new)
+            if not any(not is_known(listing_id(urlparse(u).path)) for u in new):
+                break
         return urls
 
     def listing(self, url: str) -> str:

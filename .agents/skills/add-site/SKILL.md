@@ -32,7 +32,7 @@ Create `src/lib/<site>_client.py` (HTTP) or `src/lib/<site>_web_interactor.py` (
 
 ## Step 3: Runner
 
-Create `src/sites/<site>.py` with a `SiteRunner` subclass (see `src/sites/wg_zimmer.py` for plain HTTP and draft-only, `src/sites/flatfox.py` for a Selenium login, `src/sites/wohnen_ethz.py` for email contact):
+Create `src/sites/<site>.py` with a `SiteRunner` subclass (see `src/sites/wg_zimmer.py` for plain HTTP and draft-only, `src/sites/flatfox.py` for a public JSON API, `src/sites/email_alerts.py` for reading a portal's alert emails, `src/sites/wohnen_ethz.py` for email contact):
 
 - Set `site` to the domain; it is also the data folder name.
 - `required_fields()` lists the profile fields needed to search; `send_fields()` those needed to send.
@@ -44,7 +44,7 @@ New logins or passwords go in `.env.example` (empty values) and `CREDENTIAL_ENV`
 ## Step 4: Tests and checks
 
 - Add offline tests for any pure helper you wrote (URL id parsing, contact extraction).
-- Run `make format` and `make check`; both must pass.
+- Run `uv run ruff format . && uv run ruff check --fix .`, then `uv run ruff format --check . && uv run ruff check . && uv run pytest`; it must pass.
 - Update the site list in README.md and the codebase map in AGENTS.md.
 
 ## Step 5: Hand over

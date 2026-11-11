@@ -2,13 +2,11 @@
 Tests for the profile, tracker, email parsing, scraper helpers and providers.
 """
 
-import email
 from types import SimpleNamespace
 
 import pytest
 
 from src.agent import FitAssessment
-from src.lib.email_client import extract_otp, message_text
 from src.lib.tracker import Tracker
 from src.lib.wg_zimmer_client import listing_id, parse_listing, parse_results
 from src.lib.wohnen_ethz_web_interactor import pick_contact_email
@@ -77,8 +75,8 @@ def test_wgzimmer_parsers() -> None:
 
 def test_profile_require_says_where_to_set_each_field(profile) -> None:
     profile.require("gmail_login", "gmail_password")
-    with pytest.raises(ProfileError, match="FLATFOX_LOGIN in .env"):
-        profile.require("flatfox_login", "gmail_login")
+    with pytest.raises(ProfileError, match="WOHNEN_ETHZ_LOGIN in .env"):
+        profile.require("wohnen_ethz_login", "gmail_login")
     profile.place = ""
     with pytest.raises(ProfileError, match="fill in place"):
         profile.require("place")
@@ -86,7 +84,7 @@ def test_profile_require_says_where_to_set_each_field(profile) -> None:
 
 def test_credentials_and_api_keys_come_from_environment(profile) -> None:
     assert profile.gmail_login == "me@gmail.com"
-    assert profile.flatfox_login == ""
+    assert profile.wohnen_ethz_login == ""
     assert profile.api_key("deepseek") == "test-key"
     assert profile.api_key("openai") is None
 
@@ -108,16 +106,6 @@ def test_tracker_ignores_working_files(tmp_path) -> None:
     tracker.write_working_file("review", {"response": "x"})
     tracker.save("a", "drafted")
     assert [r["id"] for r in tracker.records()] == ["a"]
-
-
-def test_otp_comes_from_body_not_headers() -> None:
-    raw = (
-        b"From: noreply@flatfox.ch\r\nMessage-ID: <123456@mail>\r\n"
-        b"Content-Type: text/plain\r\n\r\nYour code is 654321."
-    )
-    body = message_text(email.message_from_bytes(raw))
-    assert extract_otp(body) == "654321"
-    assert extract_otp("no code here") is None
 
 
 def test_pick_contact_email() -> None:

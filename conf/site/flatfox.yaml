@@ -1,2 +1,12 @@
-# Runner registered under this name in src/sites/__init__.py.
+# Runner registered under this name in src/sites/__init__.py. Uses Flatfox's public
+# API: no login, no browser.
 name: flatfox
+# Map area to search (degrees). Default: city of Zurich.
+bbox:
+  west: 8.45
+  east: 8.62
+  south: 47.32
+  north: 47.43
+# Flatfox object categories to keep (drops parking, commercial, ...).
+categories: [APARTMENT, SHARED, HOUSE]
+max_count: 400

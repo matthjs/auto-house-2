@@ -26,9 +26,9 @@ never `pip install`.
 uv sync                      # install (creates .venv/ from uv.lock)
 uv add <pkg>                 # add a dependency (uv add --dev <pkg> for dev tools)
 
-make test                    # offline tests (uv run pytest)
-make format                  # ruff format + ruff check --fix
-make check                   # what CI runs: format check, lint, tests
+uv run pytest                                     # offline tests
+uv run ruff format . && uv run ruff check --fix .  # format and lint
+uv run ruff format --check . && uv run ruff check . && uv run pytest  # what CI runs
 
 # Configuration is Hydra (conf/). Show the fully composed config instead of reading
 # single YAML files, because defaults compose:
@@ -45,7 +45,8 @@ uv run python main.py search=<s> command=check-llm                  # one tiny p
 
 Config groups: `search` (`conf/search/<name>.yaml`, lists `members` from
 `conf/person/`), `llm` (`deepseek`, `claude`, `openai`; batch mode only), `site`
-(`wgzimmer`, `flatfox`, `wohnen_ethz`). Top-level settings are documented in
+(`wgzimmer`, `flatfox`, `woko`, `email_alerts`, `wohnen_ethz`). Top-level settings are
+documented in
 `conf/config.yaml`; `dry_run` is `true` by default.
 
 ## Rules
@@ -55,7 +56,7 @@ Config groups: `search` (`conf/search/<name>.yaml`, lists `members` from
 - **`dry_run=false` only with the user's explicit OK for that exact action**, in this
   conversation. One approval covers one listing. Never send, and never mark a listing
   as sent, without it.
-- **Never run `command=search`, `command=run` or the Make run targets unless the user
+- **Never run `command=search` or `command=run` unless the user
   asks in this conversation.** They visit real sites, may log in with the user's
   accounts, and batch mode spends API credits.
 - **Never run `pytest -m live`** unless the user asks; it calls paid APIs.
@@ -146,7 +147,7 @@ Config groups: `search` (`conf/search/<name>.yaml`, lists `members` from
 
 Before saying a change is done, check each point and report pass/fail to the user:
 
-- [ ] `make check` passes (formatting, lint, offline tests).
+- [ ] The CI command passes: `uv run ruff format --check . && uv run ruff check . && uv run pytest`.
 - [ ] New behaviour has an offline test; a bug fix has a test that failed before it.
 - [ ] No `.env`, `data/`, `secret/` or personal `conf/person|search/*.yaml` is staged.
 - [ ] No path can send, or let `mark` change a status, while `dry_run` is true.
@@ -174,10 +175,13 @@ src/agent.py                batch agent: evaluate -> draft -> review (+ redraft)
 src/llm/                    providers: base.py, openai_compat.py (OpenAI, DeepSeek),
                             claude.py; __init__.py (DEFAULT_MODELS, create_provider)
 src/sites/base.py           SiteRunner: collect (search), run (batch), records
-src/sites/{wg_zimmer,flatfox,wohnen_ethz}.py   per-site runners; SITES in __init__.py
-src/lib/wg_zimmer_client.py plain-HTTP client and parsers for wgzimmer.ch
-src/lib/*_web_interactor.py Selenium scrapers (Flatfox, wohnen.ethz.ch)
-src/lib/email_client.py     Gmail SMTP send, IMAP login-code reader
+src/sites/<site>.py         per-site runners (wg_zimmer, flatfox, woko, email_alerts,
+                            wohnen_ethz); SITES in __init__.py
+src/lib/*_client.py         plain-HTTP clients and parsers (wgzimmer.ch, Flatfox API,
+                            WOKO)
+src/lib/alert_mail.py       reads portal alert emails over IMAP (read-only)
+src/lib/wohnen_ethz_web_interactor.py   Selenium scraper (needs a login)
+src/lib/email_client.py     Gmail SMTP send
 src/lib/tracker.py          per-listing JSON records with status and history
 src/migrate.py              one-time copy from the old secret/<name>/ layout
 prompts/*.md                fit rubric, writing rules, review checklist

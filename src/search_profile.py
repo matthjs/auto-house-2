@@ -20,12 +20,8 @@ DATA_DIR = Path("data")
 CREDENTIAL_ENV: dict[str, str] = {
     "wohnen_ethz_login": "WOHNEN_ETHZ_LOGIN",
     "wohnen_ethz_password": "WOHNEN_ETHZ_PASSWORD",
-    "flatfox_login": "FLATFOX_LOGIN",
-    "flatfox_password": "FLATFOX_PASSWORD",
     "gmail_login": "GMAIL_ADDRESS",
     "gmail_password": "GMAIL_APP_PASSWORD",
-    "gmail_login2": "CODE_INBOX_ADDRESS",
-    "gmail_password2": "CODE_INBOX_APP_PASSWORD",
 }
 API_KEY_ENV: dict[str, str] = {
     "deepseek": "DEEPSEEK_API_KEY",
@@ -118,12 +114,8 @@ class SearchProfile:
 
         self.wohnen_ethz_login = ""
         self.wohnen_ethz_password = ""
-        self.flatfox_login = ""
-        self.flatfox_password = ""
         self.gmail_login = ""
         self.gmail_password = ""
-        self.gmail_login2 = ""
-        self.gmail_password2 = ""
         for attribute, env_var in CREDENTIAL_ENV.items():
             setattr(self, attribute, os.environ.get(env_var, ""))
 
@@ -149,7 +141,7 @@ class SearchProfile:
         """
         Check that profile attributes are filled in.
 
-        :param fields: Attribute names, for example ``"flatfox_login"``.
+        :param fields: Attribute names, for example ``"gmail_login"``.
         :raises ProfileError: If any of them is empty; the message says where to set
             each one.
         """

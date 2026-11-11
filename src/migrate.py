@@ -2,7 +2,7 @@
 One-time migration from the old ``secret/<name>/`` layout to a one-person search in
 ``conf/person/``, ``conf/search/`` and ``data/``.
 
-Usage: ``uv run python -m src.migrate <name>`` (or ``make migrate SEARCH=<name>``).
+Usage: ``uv run python -m src.migrate <name>``.
 """
 
 import argparse
@@ -15,16 +15,17 @@ from omegaconf import OmegaConf
 
 from src.search_profile import CREDENTIAL_ENV, DATA_DIR, PERSON_DIR, SEARCH_DIR
 
-# Old site_credentials.json field -> environment variable that replaces it.
-OLD_CREDENTIAL_FIELDS: dict[str, str] = {
+# Old site_credentials.json field -> environment variable that replaces it, or
+# None when the value is no longer needed (Flatfox is now read without a login).
+OLD_CREDENTIAL_FIELDS: dict[str, str | None] = {
     "wohnen_ethz_login": CREDENTIAL_ENV["wohnen_ethz_login"],
     "wohnen_ethz_password": CREDENTIAL_ENV["wohnen_ethz_password"],
-    "flatfox_login": CREDENTIAL_ENV["flatfox_login"],
-    "flatfox_password": CREDENTIAL_ENV["flatfox_password"],
+    "flatfox_login": None,
+    "flatfox_password": None,
     "login": CREDENTIAL_ENV["gmail_login"],
     "password": CREDENTIAL_ENV["gmail_password"],
-    "login2": CREDENTIAL_ENV["gmail_login2"],
-    "password2": CREDENTIAL_ENV["gmail_password2"],
+    "login2": None,
+    "password2": None,
     "DeepSeek_API_KEY": "DEEPSEEK_API_KEY",
     "OpenAI_API_KEY": "OPENAI_API_KEY",
     "Anthropic_API_KEY": "ANTHROPIC_API_KEY",
@@ -104,6 +105,8 @@ def migrate(
         fields = json.loads(credentials.read_text(encoding="utf-8")).keys()
         moves = [
             f"  {field} -> {OLD_CREDENTIAL_FIELDS[field]}"
+            if OLD_CREDENTIAL_FIELDS[field]
+            else f"  {field}: not needed any more"
             for field in fields
             if field in OLD_CREDENTIAL_FIELDS
         ]

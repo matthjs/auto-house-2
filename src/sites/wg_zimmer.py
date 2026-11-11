@@ -38,18 +38,21 @@ class WGZimmerRunner(SiteRunner):
             region=self.profile.place_wg_zimmer,
             max_rent=self.profile.max_rent,
             max_pages=int(self.options.get("max_pages", 3)),
+            is_known=lambda pid: self.tracker.get(pid) is not None,
         )
 
     def listings(self) -> Iterator[Listing]:
         """
-        Fetch each listing that is not handled yet; failures are logged and skipped.
+        Fetch each listing that is not handled yet. Listings seen before reuse their
+        saved text instead of being fetched again; failures are logged and skipped.
 
         :return: Iterator over listings.
         """
         for url in self.urls:
             pid = listing_id(url.removeprefix("https://www.wgzimmer.ch"))
-            if self.tracker.is_done(pid):
-                yield Listing(id=pid, url=url, content="")
+            record = self.tracker.get(pid)
+            if record is not None and (self.tracker.is_done(pid) or record.get("text")):
+                yield Listing(id=pid, url=url, content=record.get("text", ""))
                 continue
             try:
                 text = self.client.listing(url)

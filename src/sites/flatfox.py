@@ -1,90 +1,72 @@
 """
-flatfox.ch: flats and shared rooms, contacted through the site's form.
+flatfox.ch: flats and shared rooms, read from Flatfox's public API. Messages are sent
+on the website by the user.
 """
 
 from collections.abc import Iterator
 
-from selenium.common.exceptions import WebDriverException
+import requests
 
-from src.lib.email_client import EmailClient
-from src.lib.flatfox_web_interactor import FlatfoxWebInteractor
+from src.lib.flatfox_client import BASE_URL, FlatfoxClient, format_listing
 from src.lib.logger import logger
 from src.sites.base import Listing, SiteRunner
+
+ZURICH_BBOX = {"west": 8.45, "east": 8.62, "south": 47.32, "north": 47.43}
+DEFAULT_CATEGORIES = ("APARTMENT", "SHARED", "HOUSE")
 
 
 class FlatfoxRunner(SiteRunner):
     """
-    Search flatfox.ch and answer through the contact form.
-
-    Logging in needs a one-time code that Flatfox emails to the account; it is read
-    from the second Gmail inbox (``login2``/``password2``).
+    Search Flatfox by map area (``site.bbox``) and the search's budget. No login.
+    Draft-only: :attr:`can_send` is ``False``.
     """
 
     site = "flatfox.ch"
+    can_send = False
 
     def required_fields(self) -> tuple[str, ...]:
         """
         Profile fields needed to search.
 
-        :return: Flatfox login, the inbox for login codes, and the place.
+        :return: None; the area comes from ``conf/site/flatfox.yaml``.
         """
-        return (
-            "flatfox_login",
-            "flatfox_password",
-            "gmail_login2",
-            "gmail_password2",
-            "place",
-        )
-
-    def send_fields(self) -> tuple[str, ...]:
-        """
-        Profile fields needed to send a message.
-
-        :return: The fields used when contacting a landlord.
-        """
-        return ("user_name", "user_phone_number")
+        return ()
 
     def start(self) -> None:
         """
-        Open the browser, log in and run the search.
+        Fetch the pins for the area and the details of new listings.
         """
-        self.interactor: FlatfoxWebInteractor | None = None
-        self.interactor = FlatfoxWebInteractor(self.profile, EmailClient(self.profile))
-        self.interactor.load()
-        self.interactor.enter()
-        self.interactor.search()
-        self.urls = self.interactor.gather_results()
+        self.client = FlatfoxClient()
+        bbox = self.options.get("bbox") or ZURICH_BBOX
+        try:
+            self.records = self.client.search(
+                bbox=dict(bbox),
+                max_price=self.profile.max_rent,
+                categories=self.options.get("categories") or DEFAULT_CATEGORIES,
+                is_known=self.tracker.is_done,
+                max_count=int(self.options.get("max_count", 400)),
+            )
+        except requests.RequestException as error:
+            logger.error("Flatfox search failed: %s", error)
+            self.records = []
 
     def listings(self) -> Iterator[Listing]:
         """
-        Visit each result; listings that fail to load are logged and skipped.
+        Yield the fetched listings.
 
         :return: Iterator over listings.
         """
-        assert self.interactor is not None
-        for url in self.urls:
-            try:
-                listing_id, html = self.interactor.visit_and_gather(url)
-            except (ValueError, WebDriverException) as error:
-                logger.warning("Could not read %s: %s", url, error)
-                continue
-            yield Listing(id=listing_id, url=url, content=html)
-
-    def send(self, listing: Listing, subject: str, message: str) -> None:
-        """
-        Post the contact form of the current listing.
-
-        :param listing: The listing (its page is open).
-        :param subject: Unused; the form has no subject field.
-        :param message: Message body.
-        :raises SendError: If Flatfox does not accept the message.
-        """
-        assert self.interactor is not None
-        self.interactor.send_information(message)
+        for record in self.records:
+            yield Listing(
+                id=str(record["pk"]),
+                url=BASE_URL + record.get("url", f"/{record['pk']}/"),
+                content=format_listing(record),
+            )
 
     def close(self) -> None:
         """
-        Close the browser if it was opened.
+        Close the HTTP session if it was opened.
         """
-        if getattr(self, "interactor", None) is not None:
-            self.interactor.close()
+        client = getattr(self, "client", None)
+        if client is not None:
+            client.session.close()
