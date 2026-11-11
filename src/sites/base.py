@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.agent import AgentResult, ApplicationAgent, html_to_text
+from src.lib.commute import CommuteClient
 from src.lib.email_client import EmailError
 from src.lib.errors import SendError
 from src.lib.logger import logger
@@ -28,6 +29,7 @@ class Listing:
     url: str
     content: str
     contact_email: str | None = None
+    location: str | None = None
 
 
 class SiteRunner(ABC):
@@ -58,6 +60,7 @@ class SiteRunner(ABC):
         dry_run: bool = True,
         max_sends: int = 5,
         options: dict[str, Any] | None = None,
+        commute: CommuteClient | None = None,
     ) -> None:
         """
         Prepare a run.
@@ -67,14 +70,18 @@ class SiteRunner(ABC):
         :param dry_run: Never send anything.
         :param max_sends: Most messages to send in one batch run.
         :param options: Site settings from ``conf/site/<site>.yaml``.
+        :param commute: Looks up travel times to the search's places for listings
+            with a :attr:`Listing.location`; ``None`` turns this off.
         """
         self.profile = profile
+        self.commute = commute
         self.agent = agent
         self.dry_run = dry_run
         self.max_sends = max_sends
         self.options = options or {}
         self.tracker = Tracker(profile.data_dir, self.site)
         self.summary: Counter[str] = Counter()
+        self._commutes: dict[str, str] = {}
 
     @abstractmethod
     def required_fields(self) -> tuple[str, ...]:
@@ -139,9 +146,35 @@ class SiteRunner(ABC):
                 if self.tracker.is_done(listing.id):
                     self.summary["already_handled"] += 1
                     continue
-                yield listing
+                yield self._with_commute(listing)
         finally:
             self.close()
+            if self.commute is not None:
+                self.commute.close()
+
+    def _with_commute(self, listing: Listing) -> Listing:
+        """
+        Add travel times to the search's places to the listing text.
+
+        Times are looked up once per listing and kept in its record, so later
+        searches make no new requests.
+
+        :param listing: A listing to be handled.
+        :return: The listing, with a commute section appended when known.
+        """
+        if self.commute is None or not listing.location or not self.profile.places:
+            return listing
+        record = self.tracker.get(listing.id)
+        commute = record.get("commute") if record else None
+        if not commute:
+            commute = self.commute.describe(
+                listing.location, self.profile.places, self.profile.display_names()
+            )
+            if record is not None:
+                self.tracker.update(listing.id, commute=commute)
+        self._commutes[listing.id] = commute
+        listing.content = f"{listing.content}\n\n{commute}"
+        return listing
 
     def collect(self) -> list[dict[str, Any]]:
         """
@@ -284,8 +317,10 @@ class SiteRunner(ABC):
         :param status: Outcome status.
         :param fields: Extra fields to store.
         """
-        extra = (
+        extra: dict[str, Any] = (
             {"contact_email": listing.contact_email} if listing.contact_email else {}
         )
+        if listing.id in self._commutes:
+            extra["commute"] = self._commutes[listing.id]
         self.tracker.save(listing.id, status, url=listing.url, **extra, **fields)
         self.summary[status] += 1

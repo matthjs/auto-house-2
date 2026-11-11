@@ -49,7 +49,12 @@ class WokoRunner(SiteRunner):
             if room["price"] is not None and room["price"] > self.profile.max_rent:
                 continue
             text = f"{room['text']}\nBewerben (apply): {room['apply_url']}"
-            yield Listing(id=room["id"], url=room["url"], content=text)
+            yield Listing(
+                id=room["id"],
+                url=room["url"],
+                content=text,
+                location=room.get("address"),
+            )
 
     def close(self) -> None:
         """

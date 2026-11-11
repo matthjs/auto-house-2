@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.lib.commute import Place
+
 PERSON_DIR = Path("conf/person")
 SEARCH_DIR = Path("conf/search")
 DATA_DIR = Path("data")
@@ -72,6 +74,7 @@ class SearchProfile:
         contact: str,
         preferences: Mapping[str, Any],
         data_root: Path = DATA_DIR,
+        places: Sequence[Place] = (),
     ) -> None:
         """
         Build a search.
@@ -81,8 +84,9 @@ class SearchProfile:
         :param contact: Name of the member who is contacted and whose accounts are used.
         :param preferences: Budget, place and other preferences of the group.
         :param data_root: Root folder for listing records.
-        :raises ProfileError: If there are no members, the contact is not a member, or
-            ``budget_total`` is not set.
+        :param places: Places members travel to; listings get their commute times.
+        :raises ProfileError: If there are no members, the contact is not a member,
+            ``budget_total`` is not set, or a place names someone who is not a member.
         """
         self.name = name
         self.config_path = SEARCH_DIR / f"{name}.yaml"
@@ -98,6 +102,14 @@ class SearchProfile:
                 f"contact '{contact}' in {self.config_path} must be one of the members"
             )
         self.contact = by_name[contact]
+        self.places = list(places)
+        for place in self.places:
+            unknown = [name for name in place.who if name not in by_name]
+            if unknown:
+                raise ProfileError(
+                    f"places '{place.name}' in {self.config_path} names "
+                    f"{', '.join(unknown)}, who are not members"
+                )
 
         description = self.contact.description
         self.user_name: str = self.contact.display_name
@@ -136,6 +148,24 @@ class SearchProfile:
         :return: ``True`` for two or more members.
         """
         return len(self.members) > 1
+
+    @property
+    def min_rooms(self) -> float | None:
+        """
+        Fewest rooms a flat must have (Swiss count, living room included).
+
+        :return: ``preferences.min_rooms``, or ``None`` if not set.
+        """
+        value = str(self.preferences.get("min_rooms") or "").strip()
+        return float(value) if value else None
+
+    def display_names(self) -> dict[str, str]:
+        """
+        Map each member's file name to the name used in messages.
+
+        :return: For example ``{"anna": "Anna Muster"}``.
+        """
+        return {person.name: person.display_name for person in self.members}
 
     def require(self, *fields: str) -> None:
         """

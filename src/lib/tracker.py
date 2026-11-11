@@ -110,6 +110,20 @@ class Tracker:
         self._write(self.path(listing_id), record)
         return record
 
+    def update(self, listing_id: str, **fields: Any) -> None:
+        """
+        Merge fields into an existing record without changing its status or history.
+
+        :param listing_id: Listing id.
+        :param fields: Fields to store.
+        :raises KeyError: If the listing has no record.
+        """
+        record = self.get(listing_id)
+        if record is None:
+            raise KeyError(listing_id)
+        record.update(fields)
+        self._write(self.path(listing_id), record)
+
     def records(self) -> list[dict[str, Any]]:
         """
         Load every record on this site.

@@ -33,6 +33,13 @@ note: null
 max_sends: 5
 min_fit: 60
 
+# Public transport time from each listing to the search's places (from the search
+# file), via the free Swiss timetable API transport.opendata.ch. Looked up once per
+# listing, on a weekday at this departure time. Off with commute.enabled=false.
+commute:
+  enabled: true
+  departure: "08:00"
+
 # Person files, and listing records under <data_dir>/<search_name>/<site>/.
 person_dir: conf/person
 data_dir: data

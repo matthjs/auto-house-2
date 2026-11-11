@@ -11,3 +11,11 @@ preferences:
   move_in_date: ""
   nice_to_haves: ""
   deal_breakers: ""
+  max_commute_minutes: null   # longest acceptable trip to a place below, per person
+
+# Places members travel to (university, work). Each listing with a known location gets
+# its public transport time to every place. Addresses as "Street 1, 8000 Town".
+places: []
+#  - name: ETH Zentrum
+#    address: Rämistrasse 101, 8092 Zürich
+#    who: [example]           # members who go there

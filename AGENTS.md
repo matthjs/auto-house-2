@@ -180,6 +180,8 @@ src/sites/<site>.py         per-site runners (wg_zimmer, flatfox, woko, email_al
 src/lib/*_client.py         plain-HTTP clients and parsers (wgzimmer.ch, Flatfox API,
                             WOKO)
 src/lib/alert_mail.py       reads portal alert emails over IMAP (read-only)
+src/lib/commute.py          public transport times to the search's places
+                            (transport.opendata.ch); added in SiteRunner
 src/lib/wohnen_ethz_web_interactor.py   Selenium scraper (needs a login)
 src/lib/email_client.py     Gmail SMTP send
 src/lib/tracker.py          per-listing JSON records with status and history

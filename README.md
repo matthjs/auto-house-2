@@ -41,6 +41,8 @@ No browser is needed except for wohnen.ethz.ch. wgzimmer.ch and WOKO list single
 
 **Email alerts:** Homegate, ImmoScout24 and Comparis block scrapers, so the tool reads the saved-search alerts they email you instead. On each portal, save a search (place, budget, rooms) and turn on email alerts to the search contact's Gmail; `site=email_alerts` then reads the last 7 days of alerts. The listing text comes from the email, and you open the link to apply. If a portal changes its link format, adjust its `listing_pattern` in [conf/site/email_alerts.yaml](conf/site/email_alerts.yaml).
 
+**Commute times:** list the places people in the search travel to (university, work) under `places` in the search file. Each Flatfox and WOKO listing then gets its public transport time to every place, from the free Swiss timetable API ([transport.opendata.ch](https://transport.opendata.ch/)), and the fit check weighs it against `max_commute_minutes`. Times are looked up once per listing. For groups, Flatfox also leaves out single rooms and flats with fewer than `min_rooms` rooms before anything is judged.
+
 Not integrated: tutti.ch (blocks automated reading), JUWO (offers aren't on public pages), ronorp.net (listings load with JavaScript), Facebook groups.
 
 # Setup
